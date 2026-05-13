@@ -45,3 +45,9 @@ fastlane/test_output
 # Environment
 .env
 .env.local
+
+# Firebase service config (NEVER commit)
+GoogleService-Info.plist
+
+# Backend scaffold — move this to its own repo (triipmate-api), don't commit here
+triipmate-api-scaffold/
