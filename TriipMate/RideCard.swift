@@ -1,0 +1,65 @@
+import SwiftUI
+
+struct RideCard: View {
+    let ride: Ride
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack {
+                Avatar(initials: ride.initials)
+                VStack(alignment: .leading, spacing: 3) {
+                    HStack(spacing: 6) {
+                        Text(ride.driver)
+                            .font(.headline)
+                        if ride.verified {
+                            Image(systemName: "checkmark.seal.fill")
+                                .foregroundStyle(Color.tmGreen)
+                        }
+                    }
+                    Label(String(format: "%.1f rating", ride.rating), systemImage: "star.fill")
+                        .font(.caption)
+                        .foregroundStyle(Color.tmAmber)
+                }
+                Spacer()
+                Text("$\(ride.price)")
+                    .font(.title2.bold())
+                    .foregroundStyle(Color.tmInk)
+            }
+
+            VStack(alignment: .leading, spacing: 8) {
+                Label(ride.from, systemImage: "circle.fill")
+                Label(ride.to, systemImage: "flag.checkered")
+            }
+            .font(.subheadline.weight(.semibold))
+            .foregroundStyle(Color.tmInk)
+
+            HStack {
+                Label("\(ride.date), \(ride.time)", systemImage: "calendar")
+                Spacer()
+                Label("\(ride.seats) seats", systemImage: "person.2")
+            }
+            .font(.caption)
+            .foregroundStyle(Color.tmSlate)
+        }
+        .padding(16)
+        .background(.white)
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(Color.tmLine, lineWidth: 1)
+        )
+    }
+}
+
+struct Avatar: View {
+    let initials: String
+
+    var body: some View {
+        Text(initials)
+            .font(.headline)
+            .foregroundStyle(.white)
+            .frame(width: 48, height: 48)
+            .background(Color.tmGreen)
+            .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+}
