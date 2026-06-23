@@ -14,7 +14,10 @@ struct ProfileView: View {
                         Text("Aymammet")
                             .font(.title2.bold())
                             .foregroundStyle(Color.tmInk)
-                        Label("Verified traveler", systemImage: "checkmark.seal.fill")
+                        Label(
+                            session.activeRole == .driver ? "Verified driver" : "Verified traveler",
+                            systemImage: "checkmark.seal.fill"
+                        )
                             .foregroundStyle(Color.tmGreen)
                     }
                     .frame(maxWidth: .infinity)
@@ -47,7 +50,7 @@ struct ProfileView: View {
                 .padding(20)
             }
             .background(Color.tmMist.ignoresSafeArea())
-            .navigationTitle("Profile")
+            .navigationTitle(session.activeRole == .driver ? "Driver Profile" : "Passenger Profile")
             .toolbar { RoleSwitchToolbar(activeRole: $session.activeRole) }
         }
     }
