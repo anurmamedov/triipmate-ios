@@ -17,10 +17,20 @@ struct RideDetailView: View {
                 RideCard(ride: ride)
 
                 detailSection("Trip details") {
-                    DetailRow(icon: "car.fill", title: "Vehicle", value: ride.vehicle)
-                    DetailRow(icon: "bag.fill", title: "Seats open", value: "\(ride.seats)")
-                    DetailRow(icon: "dollarsign.circle.fill", title: "Seat price", value: "$\(ride.price)")
-                    DetailRow(icon: "shield.lefthalf.filled", title: "Driver check", value: ride.verified ? "Verified" : "Pending")
+                    DetailRow(icon: "clock.fill", title: "Start time", value: ride.time)
+                    DetailRow(icon: "clock.badge.checkmark.fill", title: "Expected end time", value: ride.endTime)
+                    DetailRow(icon: "point.topleft.down.curvedto.point.bottomright.up.fill", title: "Route", value: "\(ride.from) / \(ride.to)")
+                    DetailRow(icon: "timer", title: "Trip time", value: ride.tripTime)
+                    DetailRow(icon: "person.2.fill", title: "Current available seats", value: "\(ride.seats)")
+                    DetailRow(icon: "carseat.left.fill", title: "Total seats", value: "\(ride.totalSeats)")
+                }
+
+                detailSection("Vehicle details") {
+                    DetailRow(icon: "car.fill", title: "Car make", value: ride.carMake)
+                    DetailRow(icon: "car.side.fill", title: "Car model", value: ride.carModel)
+                    DetailRow(icon: "calendar", title: "Car year", value: ride.carYear)
+                    DetailRow(icon: "fuelpump.fill", title: "Fuel/Electric/Hybrid", value: ride.powerType)
+                    DetailRow(icon: "rectangle.3.group.bubble.left.fill", title: "Sedan/Van", value: ride.bodyType)
                 }
 
                 detailSection("Driver note") {
