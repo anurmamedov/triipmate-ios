@@ -36,7 +36,7 @@ struct ProfileView: View {
                         Button {
                             session.isAuthenticated = false
                         } label: {
-                            SettingsRow(icon: "rectangle.portrait.and.arrow.right.fill", title: "Logout", color: .red)
+                            SettingsRow(icon: "rectangle.portrait.and.arrow.right.fill", title: "Logout", color: .tmGreen)
                         }
                         .buttonStyle(.plain)
                     }

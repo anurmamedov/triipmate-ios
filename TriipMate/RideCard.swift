@@ -27,8 +27,8 @@ struct RideCard: View {
             }
 
             VStack(alignment: .leading, spacing: 8) {
-                Label(ride.from, systemImage: "circle.fill")
-                Label(ride.to, systemImage: "flag.checkered")
+                Label(ride.from, systemImage: "location.fill")
+                Label(ride.to, systemImage: "mappin.and.ellipse")
             }
             .font(.subheadline.weight(.semibold))
             .foregroundStyle(Color.tmInk)
