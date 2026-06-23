@@ -2,6 +2,22 @@ import SwiftUI
 
 final class AppSession: ObservableObject {
     @Published var isAuthenticated = false
+    @Published var activeRole: AppRole = .passenger
+}
+
+enum AppRole: String, CaseIterable, Identifiable {
+    case passenger
+    case driver
+
+    var id: Self { self }
+
+    var title: String {
+        rawValue.capitalized
+    }
+
+    var icon: String {
+        self == .driver ? "car.fill" : "person.fill"
+    }
 }
 
 struct AuthRootView: View {

@@ -33,6 +33,17 @@ struct MessageThread: Identifiable {
     let unread: Bool
 }
 
+struct RideRequest: Identifiable {
+    let id = UUID()
+    let passenger: String
+    let initials: String
+    let route: String
+    let seats: Int
+    let requestedAt: String
+    let note: String
+    let verified: Bool
+}
+
 enum SampleData {
     static let rides: [Ride] = [
         Ride(driver: "Maya Chen", initials: "MC", from: "New York, NY", to: "Chicago, IL", date: "Jun 18", time: "7:30 AM", endTime: "8:45 PM", tripTime: "14h 15m", seats: 2, totalSeats: 5, price: 148, vehicle: "Toyota Highlander", carMake: "Toyota", carModel: "Highlander", carYear: "2022", powerType: "Hybrid", bodyType: "SUV", rating: 4.9, verified: true, notes: "Room for two carry-ons. Planning one food stop and one gas stop."),
@@ -44,5 +55,11 @@ enum SampleData {
         MessageThread(name: "Maya Chen", route: "NYC to Chicago", message: "Pickup near Penn Station works for me.", time: "2m", unread: true),
         MessageThread(name: "Darius Hill", route: "Boston to Detroit", message: "I can save a seat until tonight.", time: "1h", unread: true),
         MessageThread(name: "Elena Garcia", route: "Philly to Pittsburgh", message: "Thanks, see you Saturday morning.", time: "Yesterday", unread: false)
+    ]
+
+    static let rideRequests: [RideRequest] = [
+        RideRequest(passenger: "Jordan Lee", initials: "JL", route: "New York to Chicago", seats: 1, requestedAt: "12m ago", note: "I have one carry-on and can meet near Penn Station.", verified: true),
+        RideRequest(passenger: "Amina Patel", initials: "AP", route: "New York to Chicago", seats: 2, requestedAt: "38m ago", note: "We are flexible on pickup and happy to split tolls.", verified: true),
+        RideRequest(passenger: "Noah Williams", initials: "NW", route: "New York to Chicago", seats: 1, requestedAt: "1h ago", note: "First TriipMate ride. I can confirm today.", verified: false)
     ]
 }

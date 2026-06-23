@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct SearchView: View {
+    @EnvironmentObject private var session: AppSession
     @State private var from = "New York, NY"
     @State private var to = "Chicago, IL"
     @State private var date = Date()
@@ -19,6 +20,7 @@ struct SearchView: View {
             }
             .background(Color.tmMist.ignoresSafeArea())
             .navigationTitle("TriipMate")
+            .toolbar { RoleSwitchToolbar(activeRole: $session.activeRole) }
         }
     }
 

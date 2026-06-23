@@ -48,6 +48,7 @@ struct ProfileView: View {
             }
             .background(Color.tmMist.ignoresSafeArea())
             .navigationTitle("Profile")
+            .toolbar { RoleSwitchToolbar(activeRole: $session.activeRole) }
         }
     }
 }

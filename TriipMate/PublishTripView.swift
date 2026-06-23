@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct PublishTripView: View {
+    @EnvironmentObject private var session: AppSession
     @State private var from = ""
     @State private var to = ""
     @State private var date = Date()
@@ -39,6 +40,7 @@ struct PublishTripView: View {
                 }
             }
             .navigationTitle("Post a ride")
+            .toolbar { RoleSwitchToolbar(activeRole: $session.activeRole) }
             .scrollContentBackground(.hidden)
             .background(Color.tmMist)
         }
