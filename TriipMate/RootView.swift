@@ -2,50 +2,74 @@ import SwiftUI
 
 struct RootView: View {
     @EnvironmentObject private var session: AppSession
+    @State private var selectedTab: MainTab = .home
 
     var body: some View {
         if session.isAuthenticated {
-            Group {
+            ZStack {
                 if session.activeRole == .passenger {
                     passengerTabs
+                        .transition(.asymmetric(
+                            insertion: .opacity.combined(with: .move(edge: .leading)),
+                            removal: .opacity
+                        ))
                 } else {
                     driverTabs
+                        .transition(.asymmetric(
+                            insertion: .opacity.combined(with: .move(edge: .trailing)),
+                            removal: .opacity
+                        ))
                 }
             }
             .tint(.tmGreen)
+            .animation(.easeInOut(duration: 0.28), value: session.activeRole)
         } else {
             AuthRootView()
         }
     }
 
     private var passengerTabs: some View {
-        TabView {
+        TabView(selection: $selectedTab) {
             SearchView()
                 .tabItem { Label("Search", systemImage: "magnifyingglass") }
+                .tag(MainTab.home)
 
             MessagesView()
                 .tabItem { Label("Messages", systemImage: "bubble.left.and.bubble.right.fill") }
+                .tag(MainTab.messages)
 
             ProfileView()
                 .tabItem { Label("Profile", systemImage: "person.crop.circle.fill") }
+                .tag(MainTab.profile)
         }
     }
 
     private var driverTabs: some View {
-        TabView {
+        TabView(selection: $selectedTab) {
             DriverDashboardView()
                 .tabItem { Label("Requests", systemImage: "person.2.badge.gearshape.fill") }
+                .tag(MainTab.home)
 
             PublishTripView()
                 .tabItem { Label("Post", systemImage: "plus.circle.fill") }
+                .tag(MainTab.post)
 
             MessagesView()
                 .tabItem { Label("Messages", systemImage: "bubble.left.and.bubble.right.fill") }
+                .tag(MainTab.messages)
 
             ProfileView()
                 .tabItem { Label("Profile", systemImage: "person.crop.circle.fill") }
+                .tag(MainTab.profile)
         }
     }
+}
+
+private enum MainTab: Hashable {
+    case home
+    case post
+    case messages
+    case profile
 }
 
 struct RoleSwitchToolbar: ToolbarContent {
@@ -54,15 +78,38 @@ struct RoleSwitchToolbar: ToolbarContent {
     var body: some ToolbarContent {
         ToolbarItem(placement: .topBarTrailing) {
             Button {
-                activeRole = activeRole == .passenger ? .driver : .passenger
+                withAnimation(.spring(response: 0.5, dampingFraction: 0.85)) {
+                    activeRole = activeRole == .passenger ? .driver : .passenger
+                }
             } label: {
-                Label(
-                    activeRole == .passenger ? "Passenger" : "Driver mode",
-                    systemImage: activeRole.icon
-                )
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(Color.tmGreen)
+                ZStack {
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(Color.tmCloud)
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 8)
+                                .stroke(Color.tmLine, lineWidth: 1)
+                        }
+
+                    RoundedRectangle(cornerRadius: 6)
+                        .fill(.white)
+                        .shadow(color: Color.tmInk.opacity(0.08), radius: 2, y: 1)
+                        .frame(width: 42, height: 32)
+                        .offset(x: activeRole == .passenger ? -27 : 27)
+
+                    HStack {
+                        Image(systemName: "person.fill")
+                            .foregroundStyle(activeRole == .passenger ? Color.tmGreen : Color.tmSlate)
+                        Spacer()
+                        Image(systemName: "car.fill")
+                            .foregroundStyle(activeRole == .driver ? Color.tmGreen : Color.tmSlate)
+                    }
+                    .font(.subheadline.weight(.semibold))
+                    .padding(.horizontal, 13)
+                }
+                .frame(width: 100, height: 40)
+                .animation(.spring(response: 0.5, dampingFraction: 0.85), value: activeRole)
             }
+            .buttonStyle(.plain)
             .accessibilityLabel("Switch travel mode")
             .accessibilityValue(activeRole.title)
         }
@@ -86,7 +133,6 @@ struct DriverDashboardView: View {
             }
             .background(Color.tmMist.ignoresSafeArea())
             .navigationTitle("Driver home")
-            .toolbar { RoleSwitchToolbar(activeRole: $session.activeRole) }
         }
     }
 

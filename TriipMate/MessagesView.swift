@@ -1,8 +1,6 @@
 import SwiftUI
 
 struct MessagesView: View {
-    @EnvironmentObject private var session: AppSession
-
     var body: some View {
         NavigationStack {
             List {
@@ -36,7 +34,6 @@ struct MessagesView: View {
                 }
             }
             .navigationTitle("Messages")
-            .toolbar { RoleSwitchToolbar(activeRole: $session.activeRole) }
         }
     }
 
