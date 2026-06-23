@@ -46,13 +46,13 @@ struct RootView: View {
 
     private var driverTabs: some View {
         TabView(selection: $selectedTab) {
-            DriverDashboardView()
-                .tabItem { Label("Requests", systemImage: "person.2.badge.gearshape.fill") }
-                .tag(MainTab.home)
-
             PublishTripView()
                 .tabItem { Label("Post", systemImage: "plus.circle.fill") }
                 .tag(MainTab.post)
+
+            DriverDashboardView()
+                .tabItem { Label("Requests", systemImage: "person.2.badge.gearshape.fill") }
+                .tag(MainTab.home)
 
             MessagesView()
                 .tabItem { Label("Messages", systemImage: "bubble.left.and.bubble.right.fill") }
