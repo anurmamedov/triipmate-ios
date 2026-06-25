@@ -46,6 +46,24 @@ struct ProfileView: View {
                     .padding(16)
                     .background(.white)
                     .clipShape(RoundedRectangle(cornerRadius: 8))
+
+                    VStack(alignment: .leading, spacing: 16) {
+                        Text(session.activeRole == .driver ? "Driver tools" : "Passenger tools")
+                            .font(.headline)
+                            .foregroundStyle(Color.tmInk)
+                        if session.activeRole == .driver {
+                            SettingsRow(icon: "car.fill", title: "Vehicle details")
+                            SettingsRow(icon: "person.2.badge.gearshape.fill", title: "Passenger requests")
+                            SettingsRow(icon: "dollarsign.circle.fill", title: "Payout setup")
+                        } else {
+                            SettingsRow(icon: "ticket.fill", title: "Saved trips")
+                            SettingsRow(icon: "clock.arrow.circlepath", title: "Ride history")
+                            SettingsRow(icon: "slider.horizontal.3", title: "Travel preferences")
+                        }
+                    }
+                    .padding(16)
+                    .background(.white)
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
                 }
                 .padding(20)
             }

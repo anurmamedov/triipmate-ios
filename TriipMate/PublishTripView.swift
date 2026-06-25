@@ -1,11 +1,25 @@
 import SwiftUI
 
 struct PublishTripView: View {
+    @EnvironmentObject private var session: AppSession
     @State private var from = ""
     @State private var to = ""
+    @State private var pickupPoint = ""
+    @State private var dropoffPoint = ""
     @State private var date = Date()
+    @State private var startTime = Date()
+    @State private var arrivalTime = Date()
+    @State private var totalSeats = 4
     @State private var seats = 2
     @State private var price = 120.0
+    @State private var carMake = ""
+    @State private var carModel = ""
+    @State private var carYear = ""
+    @State private var powerType = "Fuel"
+    @State private var bodyType = "Sedan"
+    @State private var luggageAllowed = true
+    @State private var petsAllowed = false
+    @State private var smokingAllowed = false
     @State private var note = ""
 
     var body: some View {
@@ -14,17 +28,48 @@ struct PublishTripView: View {
                 Section("Route") {
                     TextField("Leaving from", text: $from)
                     TextField("Going to", text: $to)
-                    DatePicker("Departure", selection: $date)
+                    TextField("Pickup point", text: $pickupPoint)
+                    TextField("Drop-off point", text: $dropoffPoint)
+                }
+
+                Section("Schedule") {
+                    DatePicker("Departure date", selection: $date, displayedComponents: .date)
+                    DatePicker("Start time", selection: $startTime, displayedComponents: .hourAndMinute)
+                    DatePicker("Expected arrival", selection: $arrivalTime, displayedComponents: .hourAndMinute)
                 }
 
                 Section("Seats and price") {
-                    Stepper("Open seats: \(seats)", value: $seats, in: 1...7)
+                    Stepper("Total seats: \(totalSeats)", value: $totalSeats, in: 1...8)
+                    Stepper("Available seats: \(seats)", value: $seats, in: 1...totalSeats)
                     Slider(value: $price, in: 25...300, step: 5) {
                         Text("Price")
                     }
                     Text("$\(Int(price)) per seat")
                         .font(.headline)
                         .foregroundStyle(Color.tmGreen)
+                }
+
+                Section("Vehicle") {
+                    TextField("Car make", text: $carMake)
+                    TextField("Car model", text: $carModel)
+                    TextField("Car year", text: $carYear)
+                        .keyboardType(.numberPad)
+                    Picker("Power type", selection: $powerType) {
+                        Text("Fuel").tag("Fuel")
+                        Text("Electric").tag("Electric")
+                        Text("Hybrid").tag("Hybrid")
+                    }
+                    Picker("Body type", selection: $bodyType) {
+                        Text("Sedan").tag("Sedan")
+                        Text("Van").tag("Van")
+                        Text("SUV").tag("SUV")
+                    }
+                }
+
+                Section("Rules") {
+                    Toggle("Luggage allowed", isOn: $luggageAllowed)
+                    Toggle("Pets allowed", isOn: $petsAllowed)
+                    Toggle("Smoking allowed", isOn: $smokingAllowed)
                 }
 
                 Section("Trip note") {
@@ -39,6 +84,7 @@ struct PublishTripView: View {
                 }
             }
             .navigationTitle("Post a ride")
+            .toolbar { RoleSwitchToolbar(activeRole: $session.activeRole) }
             .scrollContentBackground(.hidden)
             .background(Color.tmMist)
         }

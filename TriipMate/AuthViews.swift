@@ -48,7 +48,7 @@ struct WelcomeView: View {
                     Text("TriipMate")
                         .font(.system(size: 42, weight: .bold))
                         .foregroundStyle(Color.tmInk)
-                    Text("Find trusted people going your way and split the cost of long-distance travel.")
+                    Text("Travel together. Split gas, tolls, and rental costs with trusted people going your way.")
                         .font(.body)
                         .multilineTextAlignment(.center)
                         .foregroundStyle(Color.tmSlate)
@@ -135,11 +135,11 @@ struct RegisterView: View {
 }
 
 struct ForgotPasswordView: View {
-    @State private var emailOrPhone = ""
+    @State private var email = ""
 
     var body: some View {
-        AuthFormLayout(title: "Reset password", subtitle: "Enter your email or phone and we will send a verification code.") {
-            AuthTextField(title: "Email or phone", text: $emailOrPhone, icon: "envelope.badge.fill")
+        AuthFormLayout(title: "Reset password", subtitle: "Enter your email and we will send a reset code.") {
+            AuthTextField(title: "Email", text: $email, icon: "envelope.fill")
 
             NavigationLink {
                 VerificationView(nextStep: .login)
@@ -212,20 +212,20 @@ struct CreateProfileView: View {
             .background(.white)
             .clipShape(RoundedRectangle(cornerRadius: 8))
 
+            AuthSectionTitle("Basic profile")
             AuthTextField(title: "Home city", text: $homeCity, icon: "house.fill")
             AuthTextField(title: "Home state", text: $homeState, icon: "map.fill")
             AuthTextField(title: "Age", text: $age, icon: "calendar")
                 .keyboardType(.numberPad)
-
             Picker("Gender", selection: $gender) {
                 Text("Male").tag("Male")
                 Text("Female").tag("Female")
             }
             .pickerStyle(.segmented)
-
-            Toggle("Owned car", isOn: $ownsCar)
             AuthTextField(title: "Short bio", text: $bio, icon: "text.quote")
 
+            AuthSectionTitle("Travel preferences")
+            Toggle("I may offer rides as a driver", isOn: $ownsCar)
             Toggle("Prefer quiet rides", isOn: $prefersQuietRide)
             Toggle("Usually have luggage", isOn: $allowsLuggage)
 
@@ -244,20 +244,45 @@ struct TrustSetupView: View {
     @EnvironmentObject private var session: AppSession
 
     var body: some View {
-        AuthFormLayout(title: "Trust setup", subtitle: "Verification makes shared rides safer and easier to accept.") {
+        AuthFormLayout(title: "Safety & Verification", subtitle: "Verification makes shared rides safer and easier to accept.") {
             TrustRow(icon: "phone.badge.checkmark.fill", title: "Phone verification", value: "Complete")
             TrustRow(icon: "person.text.rectangle.fill", title: "Government ID", value: "Add later")
             TrustRow(icon: "car.fill", title: "Driver license", value: "For drivers")
             TrustRow(icon: "cross.case.fill", title: "Emergency contact", value: "Recommended")
 
-            Button {
-                session.isAuthenticated = true
+            NavigationLink {
+                ModeSelectionView()
             } label: {
-                Label("Finish Setup", systemImage: "checkmark.circle.fill")
+                Label("Choose Mode", systemImage: "arrow.right.circle.fill")
                     .authPrimaryButton()
             }
         }
-        .navigationTitle("Trust")
+        .navigationTitle("Safety")
+    }
+}
+
+struct ModeSelectionView: View {
+    @EnvironmentObject private var session: AppSession
+
+    var body: some View {
+        AuthFormLayout(title: "What do you want to do today?", subtitle: "You can switch between passenger and driver mode anytime.") {
+            Button {
+                session.activeRole = .passenger
+                session.isAuthenticated = true
+            } label: {
+                ModeChoiceRow(icon: "person.fill", title: "Find a ride", detail: "Search drivers, request a seat, and message about pickup.")
+            }
+            .buttonStyle(.plain)
+
+            Button {
+                session.activeRole = .driver
+                session.isAuthenticated = true
+            } label: {
+                ModeChoiceRow(icon: "car.fill", title: "Offer a ride", detail: "Post your trip, review requests, and manage open seats.")
+            }
+            .buttonStyle(.plain)
+        }
+        .navigationTitle("Choose Mode")
     }
 }
 
@@ -335,6 +360,55 @@ struct TrustRow: View {
             Spacer()
             Text(value)
                 .font(.subheadline.weight(.semibold))
+                .foregroundStyle(Color.tmSlate)
+        }
+        .padding(16)
+        .background(.white)
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+}
+
+struct AuthSectionTitle: View {
+    let title: String
+
+    init(_ title: String) {
+        self.title = title
+    }
+
+    var body: some View {
+        Text(title)
+            .font(.headline)
+            .foregroundStyle(Color.tmInk)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.top, 8)
+    }
+}
+
+struct ModeChoiceRow: View {
+    let icon: String
+    let title: String
+    let detail: String
+
+    var body: some View {
+        HStack(spacing: 14) {
+            Image(systemName: icon)
+                .font(.title3)
+                .foregroundStyle(Color.tmGreen)
+                .frame(width: 44, height: 44)
+                .background(Color.tmCloud)
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title)
+                    .font(.headline)
+                    .foregroundStyle(Color.tmInk)
+                Text(detail)
+                    .font(.subheadline)
+                    .foregroundStyle(Color.tmSlate)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer()
+            Image(systemName: "chevron.right")
+                .font(.caption.weight(.bold))
                 .foregroundStyle(Color.tmSlate)
         }
         .padding(16)

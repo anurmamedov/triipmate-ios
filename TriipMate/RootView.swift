@@ -23,6 +23,9 @@ struct RootView: View {
             }
             .tint(.tmGreen)
             .animation(.easeInOut(duration: 0.28), value: session.activeRole)
+            .onChange(of: session.activeRole) { _ in
+                selectedTab = .home
+            }
         } else {
             AuthRootView()
         }
@@ -33,6 +36,10 @@ struct RootView: View {
             SearchView()
                 .tabItem { Label("Search", systemImage: "magnifyingglass") }
                 .tag(MainTab.home)
+
+            PassengerTripsView()
+                .tabItem { Label("My Trips", systemImage: "ticket.fill") }
+                .tag(MainTab.trips)
 
             MessagesView()
                 .tabItem { Label("Messages", systemImage: "bubble.left.and.bubble.right.fill") }
@@ -54,6 +61,10 @@ struct RootView: View {
                 .tabItem { Label("Requests", systemImage: "person.2.badge.gearshape.fill") }
                 .tag(MainTab.home)
 
+            PostedTripsView()
+                .tabItem { Label("My Trips", systemImage: "car.2.fill") }
+                .tag(MainTab.trips)
+
             MessagesView()
                 .tabItem { Label("Messages", systemImage: "bubble.left.and.bubble.right.fill") }
                 .tag(MainTab.messages)
@@ -68,6 +79,7 @@ struct RootView: View {
 private enum MainTab: Hashable {
     case home
     case post
+    case trips
     case messages
     case profile
 }
@@ -133,6 +145,7 @@ struct DriverDashboardView: View {
             }
             .background(Color.tmMist.ignoresSafeArea())
             .navigationTitle("Driver home")
+            .toolbar { RoleSwitchToolbar(activeRole: $session.activeRole) }
         }
     }
 
@@ -207,6 +220,120 @@ struct DriverDashboardView: View {
     }
 }
 
+struct PassengerTripsView: View {
+    @EnvironmentObject private var session: AppSession
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 18) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("My passenger trips")
+                            .font(.system(size: 30, weight: .bold))
+                            .foregroundStyle(Color.tmInk)
+                        Text("Track requested, accepted, and completed rides in one place.")
+                            .font(.subheadline)
+                            .foregroundStyle(Color.tmSlate)
+                    }
+
+                    TripStatusCard(status: "Pending request", title: "New York to Chicago", detail: "Waiting for Maya Chen to accept your seat request.", icon: "hourglass")
+                    TripStatusCard(status: "Accepted", title: "Philadelphia to Pittsburgh", detail: "Pickup details are confirmed in Messages.", icon: "checkmark.seal.fill")
+                }
+                .padding(20)
+            }
+            .background(Color.tmMist.ignoresSafeArea())
+            .navigationTitle("My Trips")
+            .toolbar { RoleSwitchToolbar(activeRole: $session.activeRole) }
+        }
+    }
+}
+
+struct PostedTripsView: View {
+    @EnvironmentObject private var session: AppSession
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 18) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("My posted trips")
+                            .font(.system(size: 30, weight: .bold))
+                            .foregroundStyle(Color.tmInk)
+                        Text("Manage active routes, open seats, and passenger requests.")
+                            .font(.subheadline)
+                            .foregroundStyle(Color.tmSlate)
+                    }
+
+                    ForEach(SampleData.rides.prefix(2)) { ride in
+                        VStack(alignment: .leading, spacing: 12) {
+                            HStack {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text("\(ride.from) to \(ride.to)")
+                                        .font(.headline)
+                                        .foregroundStyle(Color.tmInk)
+                                    Text("\(ride.date), \(ride.time)")
+                                        .font(.caption)
+                                        .foregroundStyle(Color.tmSlate)
+                                }
+                                Spacer()
+                                Text("\(ride.seats) seats left")
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(Color.tmGreen)
+                            }
+                            HStack {
+                                Label("$\(ride.price) / seat", systemImage: "dollarsign.circle.fill")
+                                Spacer()
+                                Label(ride.vehicle, systemImage: "car.fill")
+                            }
+                            .font(.caption)
+                            .foregroundStyle(Color.tmSlate)
+                        }
+                        .padding(16)
+                        .background(.white)
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                    }
+                }
+                .padding(20)
+            }
+            .background(Color.tmMist.ignoresSafeArea())
+            .navigationTitle("My Trips")
+            .toolbar { RoleSwitchToolbar(activeRole: $session.activeRole) }
+        }
+    }
+}
+
+struct TripStatusCard: View {
+    let status: String
+    let title: String
+    let detail: String
+    let icon: String
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: icon)
+                .foregroundStyle(Color.tmGreen)
+                .frame(width: 38, height: 38)
+                .background(Color.tmCloud)
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+            VStack(alignment: .leading, spacing: 4) {
+                Text(status)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(Color.tmGreen)
+                Text(title)
+                    .font(.headline)
+                    .foregroundStyle(Color.tmInk)
+                Text(detail)
+                    .font(.subheadline)
+                    .foregroundStyle(Color.tmSlate)
+            }
+            Spacer()
+        }
+        .padding(16)
+        .background(.white)
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+}
+
 struct DriverMetric: View {
     let value: String
     let label: String
@@ -254,7 +381,7 @@ struct DriverRequestCard: View {
                 }
                 Spacer()
             }
-            Label(request.route, systemImage: "arrow.right")
+            Label(request.route, systemImage: "mappin.and.ellipse")
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(Color.tmGreen)
             Text(request.note)

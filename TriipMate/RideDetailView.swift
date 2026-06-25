@@ -14,7 +14,7 @@ struct RideDetailView: View {
                         .foregroundStyle(Color.tmSlate)
                 }
 
-                RideCard(ride: ride)
+                topSummary
 
                 detailSection("Trip details") {
                     DetailRow(icon: "clock.fill", title: "Start time", value: ride.time)
@@ -39,15 +39,11 @@ struct RideDetailView: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
 
-                Button {
-                } label: {
-                    Label("Message \(ride.driver)", systemImage: "paperplane.fill")
-                        .font(.headline)
-                        .frame(maxWidth: .infinity)
-                        .padding()
+                detailSection("Safety") {
+                    DetailRow(icon: "checkmark.seal.fill", title: "Driver check", value: ride.verified ? "Verified" : "Pending")
+                    DetailRow(icon: "star.fill", title: "Driver rating", value: String(format: "%.1f", ride.rating))
+                    DetailRow(icon: "bubble.left.and.bubble.right.fill", title: "Trip chat", value: "Available after request")
                 }
-                .buttonStyle(.borderedProminent)
-                .tint(Color.tmGreen)
 
                 Button {
                 } label: {
@@ -58,12 +54,68 @@ struct RideDetailView: View {
                 }
                 .buttonStyle(.borderedProminent)
                 .tint(Color.tmGreen)
+
+                Button {
+                } label: {
+                    Label("Message \(ride.driver)", systemImage: "paperplane.fill")
+                        .font(.headline)
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                }
+                .buttonStyle(.bordered)
+                .tint(Color.tmGreen)
             }
             .padding(20)
         }
         .background(Color.tmMist.ignoresSafeArea())
         .navigationTitle("Ride")
         .navigationBarTitleDisplayMode(.inline)
+    }
+
+    private var topSummary: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack {
+                Avatar(initials: ride.initials)
+                VStack(alignment: .leading, spacing: 3) {
+                    HStack(spacing: 6) {
+                        Text(ride.driver)
+                            .font(.headline)
+                            .foregroundStyle(Color.tmInk)
+                        if ride.verified {
+                            Image(systemName: "checkmark.seal.fill")
+                                .foregroundStyle(Color.tmGreen)
+                        }
+                    }
+                    Label(String(format: "%.1f rating", ride.rating), systemImage: "star.fill")
+                        .font(.caption)
+                        .foregroundStyle(Color.tmAmber)
+                }
+                Spacer()
+                VStack(alignment: .trailing, spacing: 2) {
+                    Text("$\(ride.price)")
+                        .font(.title2.bold())
+                        .foregroundStyle(Color.tmInk)
+                    Text("per seat")
+                        .font(.caption)
+                        .foregroundStyle(Color.tmSlate)
+                }
+            }
+
+            HStack {
+                Label("\(ride.seats) seats left", systemImage: "person.2.fill")
+                Spacer()
+                Label(ride.vehicle, systemImage: "car.fill")
+            }
+            .font(.caption)
+            .foregroundStyle(Color.tmSlate)
+        }
+        .padding(16)
+        .background(.white)
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(Color.tmLine, lineWidth: 1)
+        )
     }
 
     private func detailSection<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {

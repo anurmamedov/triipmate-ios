@@ -1,10 +1,12 @@
 import SwiftUI
 
 struct SearchView: View {
+    @EnvironmentObject private var session: AppSession
     @State private var from = "New York, NY"
     @State private var to = "Chicago, IL"
     @State private var date = Date()
     @State private var seats = 1
+    @State private var verifiedOnly = true
 
     var body: some View {
         NavigationStack {
@@ -18,16 +20,17 @@ struct SearchView: View {
                 .padding(20)
             }
             .background(Color.tmMist.ignoresSafeArea())
-            .navigationTitle("TriipMate")
+            .navigationTitle("Find a ride")
+            .toolbar { RoleSwitchToolbar(activeRole: $session.activeRole) }
         }
     }
 
     private var header: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Share the road. Split the cost.")
+            Text("Find a ride")
                 .font(.system(size: 34, weight: .bold))
                 .foregroundStyle(Color.tmInk)
-            Text("Find drivers heading your way and make long-distance travel easier to afford.")
+            Text("Compare trusted drivers, open seats, departure time, and shared cost.")
                 .font(.subheadline)
                 .foregroundStyle(Color.tmSlate)
         }
@@ -52,6 +55,12 @@ struct SearchView: View {
                 .padding(12)
                 .background(.white)
                 .clipShape(RoundedRectangle(cornerRadius: 8))
+            }
+
+            HStack(spacing: 10) {
+                FilterChip(title: "Verified drivers", icon: "checkmark.seal.fill", isActive: verifiedOnly)
+                FilterChip(title: "Morning", icon: "sunrise.fill", isActive: false)
+                FilterChip(title: "Lowest price", icon: "dollarsign.circle.fill", isActive: false)
             }
 
             Button {
@@ -133,5 +142,26 @@ struct RouteField: View {
         .padding(12)
         .background(.white)
         .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+}
+
+struct FilterChip: View {
+    let title: String
+    let icon: String
+    let isActive: Bool
+
+    var body: some View {
+        Label(title, systemImage: icon)
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(isActive ? Color.tmGreen : Color.tmSlate)
+            .lineLimit(1)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 8)
+            .background(isActive ? Color.white : Color.tmMist)
+            .clipShape(RoundedRectangle(cornerRadius: 8))
+            .overlay(
+                RoundedRectangle(cornerRadius: 8)
+                    .stroke(isActive ? Color.tmGreen.opacity(0.35) : Color.tmLine, lineWidth: 1)
+            )
     }
 }

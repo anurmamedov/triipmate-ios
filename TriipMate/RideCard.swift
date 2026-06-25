@@ -5,6 +5,34 @@ struct RideCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
+            HStack(alignment: .top) {
+                VStack(alignment: .leading, spacing: 8) {
+                    Label(ride.from, systemImage: "location.fill")
+                    Label(ride.to, systemImage: "mappin.and.ellipse")
+                }
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(Color.tmInk)
+
+                Spacer()
+
+                VStack(alignment: .trailing, spacing: 2) {
+                    Text("$\(ride.price)")
+                        .font(.title2.bold())
+                        .foregroundStyle(Color.tmInk)
+                    Text("per seat")
+                        .font(.caption)
+                        .foregroundStyle(Color.tmSlate)
+                }
+            }
+
+            HStack {
+                Label("\(ride.date), \(ride.time)", systemImage: "calendar")
+                Spacer()
+                Label("\(ride.seats) seats left", systemImage: "person.2.fill")
+            }
+            .font(.caption)
+            .foregroundStyle(Color.tmSlate)
+
             HStack {
                 Avatar(initials: ride.initials)
                 VStack(alignment: .leading, spacing: 3) {
@@ -21,25 +49,7 @@ struct RideCard: View {
                         .foregroundStyle(Color.tmAmber)
                 }
                 Spacer()
-                Text("$\(ride.price)")
-                    .font(.title2.bold())
-                    .foregroundStyle(Color.tmInk)
             }
-
-            VStack(alignment: .leading, spacing: 8) {
-                Label(ride.from, systemImage: "location.fill")
-                Label(ride.to, systemImage: "mappin.and.ellipse")
-            }
-            .font(.subheadline.weight(.semibold))
-            .foregroundStyle(Color.tmInk)
-
-            HStack {
-                Label("\(ride.date), \(ride.time)", systemImage: "calendar")
-                Spacer()
-                Label("\(ride.seats) seats", systemImage: "person.2")
-            }
-            .font(.caption)
-            .foregroundStyle(Color.tmSlate)
         }
         .padding(16)
         .background(.white)
