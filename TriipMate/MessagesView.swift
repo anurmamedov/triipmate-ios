@@ -52,8 +52,9 @@ struct MessagesView: View {
                     }
                 }
             }
-            .navigationTitle("Messages")
-            .toolbar { RoleSwitchToolbar(activeRole: $session.activeRole) }
+            .safeAreaInset(edge: .top, spacing: 0) {
+                RoleSwitchHeader(activeRole: $session.activeRole)
+            }
         }
     }
 

@@ -49,12 +49,16 @@ struct RootView: View {
                 .tabItem { Label("Profile", systemImage: "person.crop.circle.fill") }
                 .tag(MainTab.profile)
         }
+        .toolbar(.hidden, for: .tabBar)
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            MainTabBar(role: .passenger, selectedTab: $selectedTab)
+        }
     }
 
     private var driverTabs: some View {
         TabView(selection: $selectedTab) {
             PublishTripView()
-                .tabItem { Label("Post", systemImage: "plus.circle.fill") }
+                .tabItem { Label("Post ride", systemImage: "plus.circle.fill") }
                 .tag(MainTab.post)
 
             DriverDashboardView()
@@ -73,6 +77,10 @@ struct RootView: View {
                 .tabItem { Label("Profile", systemImage: "person.crop.circle.fill") }
                 .tag(MainTab.profile)
         }
+        .toolbar(.hidden, for: .tabBar)
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            MainTabBar(role: .driver, selectedTab: $selectedTab)
+        }
     }
 }
 
@@ -84,17 +92,88 @@ private enum MainTab: Hashable {
     case profile
 }
 
-struct RoleSwitchToolbar: ToolbarContent {
+private struct MainTabItem: Identifiable {
+    let tab: MainTab
+    let title: String
+    let icon: String
+
+    var id: MainTab { tab }
+}
+
+private struct MainTabBar: View {
+    let role: AppRole
+    @Binding var selectedTab: MainTab
+
+    private var items: [MainTabItem] {
+        if role == .driver {
+            return [
+                MainTabItem(tab: .post, title: "Post ride", icon: "plus.circle.fill"),
+                MainTabItem(tab: .home, title: "Requests", icon: "person.2.badge.gearshape.fill"),
+                MainTabItem(tab: .trips, title: "My Trips", icon: "car.2.fill"),
+                MainTabItem(tab: .messages, title: "Messages", icon: "bubble.left.and.bubble.right.fill"),
+                MainTabItem(tab: .profile, title: "Profile", icon: "person.crop.circle.fill")
+            ]
+        }
+
+        return [
+            MainTabItem(tab: .home, title: "Search", icon: "magnifyingglass"),
+            MainTabItem(tab: .trips, title: "My Trips", icon: "ticket.fill"),
+            MainTabItem(tab: .messages, title: "Messages", icon: "bubble.left.and.bubble.right.fill"),
+            MainTabItem(tab: .profile, title: "Profile", icon: "person.crop.circle.fill")
+        ]
+    }
+
+    var body: some View {
+        HStack(spacing: role == .driver ? 2 : 8) {
+            ForEach(items) { item in
+                Button {
+                    withAnimation(.easeOut(duration: 0.18)) {
+                        selectedTab = item.tab
+                    }
+                } label: {
+                    VStack(spacing: 3) {
+                        Image(systemName: item.icon)
+                            .font(.system(size: 20, weight: .semibold))
+                            .frame(height: 24)
+                        Text(item.title)
+                            .font(.system(size: 10, weight: .semibold))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.78)
+                    }
+                    .foregroundStyle(selectedTab == item.tab ? Color.tmGreen : Color.tmInk)
+                    .frame(width: role == .driver ? 67 : 72, height: 50)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(item.title)
+                .accessibilityAddTraits(selectedTab == item.tab ? .isSelected : [])
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.top, 5)
+        .padding(.bottom, 4)
+        .background(Color.white.ignoresSafeArea(edges: .bottom))
+        .overlay(alignment: .top) {
+            Rectangle()
+                .fill(Color.tmLine)
+                .frame(height: 1)
+        }
+        .shadow(color: Color.tmInk.opacity(0.06), radius: 6, y: -2)
+    }
+}
+
+struct RoleSwitchHeader: View {
     @Binding var activeRole: AppRole
 
-    var body: some ToolbarContent {
-        ToolbarItem(placement: .topBarTrailing) {
+    var body: some View {
+        HStack {
+            Spacer()
             Button {
                 withAnimation(.spring(response: 0.5, dampingFraction: 0.85)) {
                     activeRole = activeRole == .passenger ? .driver : .passenger
                 }
             } label: {
-                ZStack {
+                ZStack(alignment: activeRole == .passenger ? .leading : .trailing) {
                     RoundedRectangle(cornerRadius: 8)
                         .fill(Color.tmCloud)
                         .overlay {
@@ -105,25 +184,33 @@ struct RoleSwitchToolbar: ToolbarContent {
                     RoundedRectangle(cornerRadius: 6)
                         .fill(.white)
                         .shadow(color: Color.tmInk.opacity(0.08), radius: 2, y: 1)
-                        .frame(width: 42, height: 32)
-                        .offset(x: activeRole == .passenger ? -27 : 27)
+                        .frame(width: 40, height: 30)
+                        .padding(3)
 
-                    HStack {
+                    HStack(spacing: 0) {
                         Image(systemName: "person.fill")
                             .foregroundStyle(activeRole == .passenger ? Color.tmGreen : Color.tmSlate)
-                        Spacer()
+                            .frame(width: 44, height: 36)
                         Image(systemName: "car.fill")
                             .foregroundStyle(activeRole == .driver ? Color.tmGreen : Color.tmSlate)
+                            .frame(width: 44, height: 36)
                     }
                     .font(.subheadline.weight(.semibold))
-                    .padding(.horizontal, 13)
                 }
-                .frame(width: 100, height: 40)
-                .animation(.spring(response: 0.5, dampingFraction: 0.85), value: activeRole)
+                .frame(width: 88, height: 36)
+                .animation(.spring(response: 0.38, dampingFraction: 0.86), value: activeRole)
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Switch travel mode")
             .accessibilityValue(activeRole.title)
+        }
+        .frame(height: 48)
+        .padding(.horizontal, 20)
+        .background(Color.tmMist)
+        .overlay(alignment: .bottom) {
+            Rectangle()
+                .fill(Color.tmLine.opacity(0.7))
+                .frame(height: 1)
         }
     }
 }
@@ -144,8 +231,9 @@ struct DriverDashboardView: View {
                 .padding(20)
             }
             .background(Color.tmMist.ignoresSafeArea())
-            .navigationTitle("Driver home")
-            .toolbar { RoleSwitchToolbar(activeRole: $session.activeRole) }
+            .safeAreaInset(edge: .top, spacing: 0) {
+                RoleSwitchHeader(activeRole: $session.activeRole)
+            }
         }
     }
 
@@ -227,14 +315,9 @@ struct PassengerTripsView: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("My passenger trips")
-                            .font(.system(size: 30, weight: .bold))
-                            .foregroundStyle(Color.tmInk)
-                        Text("Track requested, accepted, and completed rides in one place.")
-                            .font(.subheadline)
-                            .foregroundStyle(Color.tmSlate)
-                    }
+                    Text("Track requested, accepted, and completed rides in one place.")
+                        .font(.subheadline)
+                        .foregroundStyle(Color.tmSlate)
 
                     TripStatusCard(status: "Pending request", title: "New York to Chicago", detail: "Waiting for Maya Chen to accept your seat request.", icon: "hourglass")
                     TripStatusCard(status: "Accepted", title: "Philadelphia to Pittsburgh", detail: "Pickup details are confirmed in Messages.", icon: "checkmark.seal.fill")
@@ -242,8 +325,9 @@ struct PassengerTripsView: View {
                 .padding(20)
             }
             .background(Color.tmMist.ignoresSafeArea())
-            .navigationTitle("My Trips")
-            .toolbar { RoleSwitchToolbar(activeRole: $session.activeRole) }
+            .safeAreaInset(edge: .top, spacing: 0) {
+                RoleSwitchHeader(activeRole: $session.activeRole)
+            }
         }
     }
 }
@@ -255,14 +339,9 @@ struct PostedTripsView: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("My posted trips")
-                            .font(.system(size: 30, weight: .bold))
-                            .foregroundStyle(Color.tmInk)
-                        Text("Manage active routes, open seats, and passenger requests.")
-                            .font(.subheadline)
-                            .foregroundStyle(Color.tmSlate)
-                    }
+                    Text("Manage active routes, open seats, and passenger requests.")
+                        .font(.subheadline)
+                        .foregroundStyle(Color.tmSlate)
 
                     ForEach(SampleData.rides.prefix(2)) { ride in
                         VStack(alignment: .leading, spacing: 12) {
@@ -296,8 +375,9 @@ struct PostedTripsView: View {
                 .padding(20)
             }
             .background(Color.tmMist.ignoresSafeArea())
-            .navigationTitle("My Trips")
-            .toolbar { RoleSwitchToolbar(activeRole: $session.activeRole) }
+            .safeAreaInset(edge: .top, spacing: 0) {
+                RoleSwitchHeader(activeRole: $session.activeRole)
+            }
         }
     }
 }
@@ -387,19 +467,173 @@ struct DriverRequestCard: View {
             Text(request.note)
                 .font(.subheadline)
                 .foregroundStyle(Color.tmSlate)
-            HStack(spacing: 10) {
-                Button("Decline", action: onDecline)
-                    .buttonStyle(.bordered)
-                    .tint(Color.tmSlate)
-                Button("Accept", action: onAccept)
-                    .buttonStyle(.borderedProminent)
-                    .tint(Color.tmGreen)
-                Spacer()
+            NavigationLink {
+                DriverRequestDetailView(
+                    request: request,
+                    onAccept: onAccept,
+                    onDecline: onDecline
+                )
+            } label: {
+                Label("Details", systemImage: "doc.text.magnifyingglass")
+                    .font(.subheadline.weight(.semibold))
+                    .frame(maxWidth: .infinity)
             }
+            .buttonStyle(.borderedProminent)
+            .tint(Color.tmGreen)
         }
         .padding(16)
         .background(.white)
         .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+}
+
+struct DriverRequestDetailView: View {
+    let request: RideRequest
+    let onAccept: () -> Void
+    let onDecline: () -> Void
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        ScrollView {
+            VStack(spacing: 16) {
+                passengerSummary
+                routeSection
+                requestSection
+                messageSection
+            }
+            .padding(20)
+        }
+        .background(Color.tmMist.ignoresSafeArea())
+        .navigationTitle("Request details")
+        .navigationBarTitleDisplayMode(.inline)
+        .safeAreaInset(edge: .bottom) {
+            actionBar
+        }
+    }
+
+    private var passengerSummary: some View {
+        HStack(spacing: 14) {
+            Avatar(initials: request.initials)
+                .scaleEffect(1.15)
+                .padding(.horizontal, 4)
+            VStack(alignment: .leading, spacing: 5) {
+                HStack(spacing: 6) {
+                    Text(request.passenger)
+                        .font(.title3.bold())
+                        .foregroundStyle(Color.tmInk)
+                    if request.verified {
+                        Image(systemName: "checkmark.seal.fill")
+                            .foregroundStyle(Color.tmGreen)
+                    }
+                }
+                Text(request.verified ? "Identity verified" : "Identity not verified")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(request.verified ? Color.tmGreen : Color.tmAmber)
+                HStack(spacing: 12) {
+                    Label(request.completedTrips == 0 ? "New rider" : "\(request.completedTrips) trips", systemImage: "car.fill")
+                    if request.completedTrips > 0 {
+                        Label(String(format: "%.1f", request.rating), systemImage: "star.fill")
+                    }
+                }
+                .font(.caption)
+                .foregroundStyle(Color.tmSlate)
+            }
+            Spacer()
+        }
+        .padding(16)
+        .background(.white)
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+
+    private var routeSection: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            RequestDetailRow(icon: "location.fill", title: "Pickup", value: request.pickup)
+            RequestDetailRow(icon: "mappin.and.ellipse", title: "Drop-off", value: request.dropoff)
+            RequestDetailRow(icon: "calendar", title: "Departure", value: "\(request.departureDate) at \(request.departureTime)")
+        }
+        .requestDetailSection()
+    }
+
+    private var requestSection: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            RequestDetailRow(icon: "person.2.fill", title: "Seats requested", value: "\(request.seats)")
+            RequestDetailRow(icon: "dollarsign.circle.fill", title: "Price", value: "$\(request.pricePerSeat) per seat")
+            RequestDetailRow(icon: "banknote.fill", title: "Request total", value: "$\(request.pricePerSeat * request.seats)")
+            RequestDetailRow(icon: "clock.fill", title: "Requested", value: request.requestedAt)
+            RequestDetailRow(icon: "suitcase.fill", title: "Luggage", value: request.luggage)
+        }
+        .requestDetailSection()
+    }
+
+    private var messageSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Label("Passenger note", systemImage: "text.bubble.fill")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(Color.tmGreen)
+            Text(request.note)
+                .font(.body)
+                .foregroundStyle(Color.tmInk)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .requestDetailSection()
+    }
+
+    private var actionBar: some View {
+        HStack(spacing: 12) {
+            Button {
+                onDecline()
+                dismiss()
+            } label: {
+                Label("Decline", systemImage: "xmark")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.bordered)
+            .tint(Color.tmSlate)
+
+            Button {
+                onAccept()
+                dismiss()
+            } label: {
+                Label("Accept", systemImage: "checkmark")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(Color.tmGreen)
+        }
+        .padding(.horizontal, 20)
+        .padding(.vertical, 12)
+        .background(.ultraThinMaterial)
+    }
+}
+
+struct RequestDetailRow: View {
+    let icon: String
+    let title: String
+    let value: String
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: icon)
+                .foregroundStyle(Color.tmGreen)
+                .frame(width: 28)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.caption)
+                    .foregroundStyle(Color.tmSlate)
+                Text(value)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(Color.tmInk)
+            }
+            Spacer()
+        }
+    }
+}
+
+private extension View {
+    func requestDetailSection() -> some View {
+        padding(16)
+            .background(.white)
+            .clipShape(RoundedRectangle(cornerRadius: 8))
     }
 }
 

@@ -68,8 +68,9 @@ struct ProfileView: View {
                 .padding(20)
             }
             .background(Color.tmMist.ignoresSafeArea())
-            .navigationTitle(session.activeRole == .driver ? "Driver Profile" : "Passenger Profile")
-            .toolbar { RoleSwitchToolbar(activeRole: $session.activeRole) }
+            .safeAreaInset(edge: .top, spacing: 0) {
+                RoleSwitchHeader(activeRole: $session.activeRole)
+            }
         }
     }
 }

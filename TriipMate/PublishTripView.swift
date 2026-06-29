@@ -83,8 +83,9 @@ struct PublishTripView: View {
                         .frame(maxWidth: .infinity)
                 }
             }
-            .navigationTitle("Post a ride")
-            .toolbar { RoleSwitchToolbar(activeRole: $session.activeRole) }
+            .safeAreaInset(edge: .top, spacing: 0) {
+                RoleSwitchHeader(activeRole: $session.activeRole)
+            }
             .scrollContentBackground(.hidden)
             .background(Color.tmMist)
         }

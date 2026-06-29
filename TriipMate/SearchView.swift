@@ -12,7 +12,6 @@ struct SearchView: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
-                    header
                     searchPanel
                     savingsBand
                     rideList
@@ -20,19 +19,9 @@ struct SearchView: View {
                 .padding(20)
             }
             .background(Color.tmMist.ignoresSafeArea())
-            .navigationTitle("Find a ride")
-            .toolbar { RoleSwitchToolbar(activeRole: $session.activeRole) }
-        }
-    }
-
-    private var header: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Find a ride")
-                .font(.system(size: 34, weight: .bold))
-                .foregroundStyle(Color.tmInk)
-            Text("Compare trusted drivers, open seats, departure time, and shared cost.")
-                .font(.subheadline)
-                .foregroundStyle(Color.tmSlate)
+            .safeAreaInset(edge: .top, spacing: 0) {
+                RoleSwitchHeader(activeRole: $session.activeRole)
+            }
         }
     }
 
