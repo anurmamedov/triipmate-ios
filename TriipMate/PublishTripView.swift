@@ -76,18 +76,35 @@ struct PublishTripView: View {
                     TextField("Pickup details, luggage space, stops", text: $note, axis: .vertical)
                         .lineLimit(4, reservesSpace: true)
                 }
-
-                Button {
-                } label: {
-                    Label("Publish ride", systemImage: "checkmark.circle.fill")
-                        .frame(maxWidth: .infinity)
-                }
             }
             .safeAreaInset(edge: .top, spacing: 0) {
                 RoleSwitchHeader(activeRole: $session.activeRole)
             }
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                publishAction
+            }
             .scrollContentBackground(.hidden)
             .background(Color.tmMist)
+        }
+    }
+
+    private var publishAction: some View {
+        Button {
+        } label: {
+            Label("Publish ride", systemImage: "checkmark.circle.fill")
+                .font(.headline)
+                .frame(maxWidth: .infinity)
+                .frame(height: 50)
+        }
+        .buttonStyle(.borderedProminent)
+        .tint(Color.tmGreen)
+        .padding(.horizontal, 20)
+        .padding(.vertical, 10)
+        .background(Color.tmMist)
+        .overlay(alignment: .top) {
+            Rectangle()
+                .fill(Color.tmLine)
+                .frame(height: 1)
         }
     }
 }
