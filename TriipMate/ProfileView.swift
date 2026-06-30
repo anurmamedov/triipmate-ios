@@ -37,7 +37,7 @@ struct ProfileView: View {
                         SettingsRow(icon: "bell.fill", title: "Trip alerts")
                         SettingsRow(icon: "questionmark.circle.fill", title: "Support")
                         Button {
-                            session.isAuthenticated = false
+                            session.logout()
                         } label: {
                             SettingsRow(icon: "rectangle.portrait.and.arrow.right.fill", title: "Logout", color: .tmGreen)
                         }

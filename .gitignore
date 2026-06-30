@@ -47,6 +47,10 @@ fastlane/test_output
 .env
 .env.local
 
+# Local CLI/tooling
+.tools/
+firepit-log.txt
+
 # Firebase service config (NEVER commit)
 GoogleService-Info.plist
 

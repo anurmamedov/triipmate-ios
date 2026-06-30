@@ -1,8 +1,148 @@
 import SwiftUI
 
+struct AuthUser {
+    let uid: String
+    let email: String
+    let idToken: String
+}
+
+enum LocalAuthError: LocalizedError {
+    case invalidResponse
+    case server(String)
+
+    var errorDescription: String? {
+        switch self {
+        case .invalidResponse:
+            return "The auth emulator returned an unexpected response."
+        case .server(let message):
+            return message
+        }
+    }
+}
+
 final class AppSession: ObservableObject {
     @Published var isAuthenticated = false
     @Published var activeRole: AppRole = .passenger
+    @Published var authUser: AuthUser?
+    @Published var authError: String?
+    @Published var isAuthWorking = false
+
+    private let authService = LocalFirebaseAuthService()
+
+    @MainActor
+    func register(email: String, password: String, confirmPassword: String) async {
+        guard password == confirmPassword else {
+            authError = "Passwords do not match."
+            return
+        }
+        await performAuth {
+            try await authService.register(email: email, password: password)
+        }
+    }
+
+    @MainActor
+    func login(email: String, password: String) async {
+        await performAuth {
+            try await authService.login(email: email, password: password)
+        }
+    }
+
+    @MainActor
+    func logout() {
+        authUser = nil
+        isAuthenticated = false
+        authError = nil
+    }
+
+    @MainActor
+    private func performAuth(_ action: () async throws -> AuthUser) async {
+        isAuthWorking = true
+        authError = nil
+        defer { isAuthWorking = false }
+
+        do {
+            authUser = try await action()
+            isAuthenticated = true
+        } catch {
+            authError = error.localizedDescription
+        }
+    }
+}
+
+struct LocalFirebaseAuthService {
+    private let baseURL = URL(string: "http://127.0.0.1:9099/identitytoolkit.googleapis.com/v1")!
+    private let apiKey = "triipmate-local"
+
+    func register(email: String, password: String) async throws -> AuthUser {
+        try await sendAuthRequest(endpoint: "accounts:signUp", email: email, password: password)
+    }
+
+    func login(email: String, password: String) async throws -> AuthUser {
+        try await sendAuthRequest(endpoint: "accounts:signInWithPassword", email: email, password: password)
+    }
+
+    private func sendAuthRequest(endpoint: String, email: String, password: String) async throws -> AuthUser {
+        var components = URLComponents(url: baseURL.appendingPathComponent(endpoint), resolvingAgainstBaseURL: false)!
+        components.queryItems = [URLQueryItem(name: "key", value: apiKey)]
+
+        var request = URLRequest(url: components.url!)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONEncoder().encode(AuthRequest(email: email, password: password, returnSecureToken: true))
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw LocalAuthError.invalidResponse
+        }
+
+        if (200..<300).contains(httpResponse.statusCode) {
+            let authResponse = try JSONDecoder().decode(AuthResponse.self, from: data)
+            return AuthUser(uid: authResponse.localId, email: authResponse.email, idToken: authResponse.idToken)
+        }
+
+        if let errorResponse = try? JSONDecoder().decode(AuthErrorResponse.self, from: data) {
+            throw LocalAuthError.server(errorResponse.error.message.authFriendlyMessage)
+        }
+
+        throw LocalAuthError.invalidResponse
+    }
+}
+
+private struct AuthRequest: Encodable {
+    let email: String
+    let password: String
+    let returnSecureToken: Bool
+}
+
+private struct AuthResponse: Decodable {
+    let localId: String
+    let email: String
+    let idToken: String
+}
+
+private struct AuthErrorResponse: Decodable {
+    let error: AuthErrorBody
+}
+
+private struct AuthErrorBody: Decodable {
+    let message: String
+}
+
+private extension String {
+    var authFriendlyMessage: String {
+        switch self {
+        case "EMAIL_EXISTS":
+            return "This email is already registered. Try logging in."
+        case "EMAIL_NOT_FOUND", "INVALID_LOGIN_CREDENTIALS":
+            return "No account found with this email and password."
+        case "INVALID_PASSWORD":
+            return "Incorrect password."
+        case "WEAK_PASSWORD : Password should be at least 6 characters":
+            return "Password should be at least 6 characters."
+        default:
+            return replacingOccurrences(of: "_", with: " ").capitalized
+        }
+    }
 }
 
 enum AppRole: String, CaseIterable, Identifiable {
@@ -96,17 +236,28 @@ struct LoginView: View {
             .frame(maxWidth: .infinity, alignment: .trailing)
 
             Button {
-                session.isAuthenticated = true
+                Task {
+                    await session.login(email: email, password: password)
+                }
             } label: {
-                Label("Log In", systemImage: "arrow.right.circle.fill")
-                    .authPrimaryButton()
+                HStack {
+                    if session.isAuthWorking {
+                        ProgressView()
+                    }
+                    Label("Log In", systemImage: "arrow.right.circle.fill")
+                }
+                .authPrimaryButton()
             }
+            .disabled(email.isEmpty || password.isEmpty || session.isAuthWorking)
+
+            AuthErrorMessage(message: session.authError)
         }
         .navigationTitle("Log In")
     }
 }
 
 struct RegisterView: View {
+    @EnvironmentObject private var session: AppSession
     @State private var firstName = ""
     @State private var lastName = ""
     @State private var email = ""
@@ -123,14 +274,40 @@ struct RegisterView: View {
             AuthSecureField(title: "Password", text: $password, icon: "lock.fill")
             AuthSecureField(title: "Confirm password", text: $confirmPassword, icon: "lock.shield.fill")
 
-            NavigationLink {
-                VerificationView(nextStep: .profile)
+            Button {
+                Task {
+                    await session.register(email: email, password: password, confirmPassword: confirmPassword)
+                }
             } label: {
-                Label("Create Account", systemImage: "checkmark.circle.fill")
-                    .authPrimaryButton()
+                HStack {
+                    if session.isAuthWorking {
+                        ProgressView()
+                    }
+                    Label("Create Account", systemImage: "checkmark.circle.fill")
+                }
+                .authPrimaryButton()
             }
+            .disabled(email.isEmpty || password.isEmpty || confirmPassword.isEmpty || session.isAuthWorking)
+
+            AuthErrorMessage(message: session.authError)
         }
         .navigationTitle("Register")
+    }
+}
+
+struct AuthErrorMessage: View {
+    let message: String?
+
+    var body: some View {
+        if let message {
+            Text(message)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.red)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(12)
+                .background(Color.red.opacity(0.08))
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+        }
     }
 }
 
