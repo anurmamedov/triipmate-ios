@@ -32,55 +32,47 @@ struct RootView: View {
     }
 
     private var passengerTabs: some View {
-        TabView(selection: $selectedTab) {
-            SearchView()
-                .tabItem { Label("Search", systemImage: "magnifyingglass") }
-                .tag(MainTab.home)
+        VStack(spacing: 0) {
+            Group {
+                switch selectedTab {
+                case .home, .post:
+                    SearchView()
+                case .trips:
+                    PassengerTripsView()
+                case .messages:
+                    MessagesView()
+                case .profile:
+                    ProfileView()
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-            PassengerTripsView()
-                .tabItem { Label("My Trips", systemImage: "ticket.fill") }
-                .tag(MainTab.trips)
-
-            MessagesView()
-                .tabItem { Label("Messages", systemImage: "bubble.left.and.bubble.right.fill") }
-                .tag(MainTab.messages)
-
-            ProfileView()
-                .tabItem { Label("Profile", systemImage: "person.crop.circle.fill") }
-                .tag(MainTab.profile)
-        }
-        .toolbar(.hidden, for: .tabBar)
-        .safeAreaInset(edge: .bottom, spacing: 0) {
             MainTabBar(role: .passenger, selectedTab: $selectedTab)
         }
+        .background(Color.tmMist.ignoresSafeArea(edges: .bottom))
     }
 
     private var driverTabs: some View {
-        TabView(selection: $selectedTab) {
-            PublishTripView()
-                .tabItem { Label("Post ride", systemImage: "plus.circle.fill") }
-                .tag(MainTab.post)
+        VStack(spacing: 0) {
+            Group {
+                switch selectedTab {
+                case .post:
+                    PublishTripView()
+                case .home:
+                    DriverDashboardView()
+                case .trips:
+                    PostedTripsView()
+                case .messages:
+                    MessagesView()
+                case .profile:
+                    ProfileView()
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-            DriverDashboardView()
-                .tabItem { Label("Requests", systemImage: "person.2.badge.gearshape.fill") }
-                .tag(MainTab.home)
-
-            PostedTripsView()
-                .tabItem { Label("My Trips", systemImage: "car.2.fill") }
-                .tag(MainTab.trips)
-
-            MessagesView()
-                .tabItem { Label("Messages", systemImage: "bubble.left.and.bubble.right.fill") }
-                .tag(MainTab.messages)
-
-            ProfileView()
-                .tabItem { Label("Profile", systemImage: "person.crop.circle.fill") }
-                .tag(MainTab.profile)
-        }
-        .toolbar(.hidden, for: .tabBar)
-        .safeAreaInset(edge: .bottom, spacing: 0) {
             MainTabBar(role: .driver, selectedTab: $selectedTab)
         }
+        .background(Color.tmMist.ignoresSafeArea(edges: .bottom))
     }
 }
 
@@ -103,6 +95,7 @@ private struct MainTabItem: Identifiable {
 private struct MainTabBar: View {
     let role: AppRole
     @Binding var selectedTab: MainTab
+    @Namespace private var selectionAnimation
 
     private var items: [MainTabItem] {
         if role == .driver {
@@ -124,24 +117,30 @@ private struct MainTabBar: View {
     }
 
     var body: some View {
-        HStack(spacing: role == .driver ? 2 : 8) {
+        HStack(spacing: role == .driver ? 2 : 5) {
             ForEach(items) { item in
                 Button {
-                    withAnimation(.easeOut(duration: 0.18)) {
-                        selectedTab = item.tab
-                    }
+                    selectedTab = item.tab
                 } label: {
                     VStack(spacing: 3) {
                         Image(systemName: item.icon)
-                            .font(.system(size: 20, weight: .semibold))
-                            .frame(height: 24)
+                            .font(.system(size: 19, weight: .semibold))
+                            .frame(height: 22)
+                            .foregroundStyle(selectedTab == item.tab ? Color.tmGreen : Color.white.opacity(0.62))
                         Text(item.title)
                             .font(.system(size: 10, weight: .semibold))
                             .lineLimit(1)
-                            .minimumScaleFactor(0.78)
+                            .minimumScaleFactor(0.72)
+                            .foregroundStyle(selectedTab == item.tab ? Color.white : Color.white.opacity(0.62))
                     }
-                    .foregroundStyle(selectedTab == item.tab ? Color.tmGreen : Color.tmInk)
-                    .frame(width: role == .driver ? 67 : 72, height: 50)
+                    .frame(width: role == .driver ? 65 : 72, height: 50)
+                    .background {
+                        if selectedTab == item.tab {
+                            RoundedRectangle(cornerRadius: 18)
+                                .fill(Color.white.opacity(0.12))
+                                .matchedGeometryEffect(id: "selected-tab", in: selectionAnimation)
+                        }
+                    }
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
@@ -149,16 +148,14 @@ private struct MainTabBar: View {
                 .accessibilityAddTraits(selectedTab == item.tab ? .isSelected : [])
             }
         }
-        .frame(maxWidth: .infinity)
-        .padding(.top, 5)
-        .padding(.bottom, 4)
-        .background(Color.white.ignoresSafeArea(edges: .bottom))
-        .overlay(alignment: .top) {
-            Rectangle()
-                .fill(Color.tmLine)
-                .frame(height: 1)
-        }
-        .shadow(color: Color.tmInk.opacity(0.06), radius: 6, y: -2)
+        .animation(.spring(response: 0.38, dampingFraction: 0.88), value: selectedTab)
+        .padding(6)
+        .background(Color(red: 0.04, green: 0.15, blue: 0.12))
+        .clipShape(RoundedRectangle(cornerRadius: 24))
+        .shadow(color: Color.tmInk.opacity(0.18), radius: 12, y: 5)
+        .padding(.horizontal, 12)
+        .padding(.top, 7)
+        .padding(.bottom, 6)
     }
 }
 
