@@ -49,7 +49,6 @@ struct RootView: View {
 
             MainTabBar(role: .passenger, selectedTab: $selectedTab)
         }
-        .background(Color.tmMist.ignoresSafeArea(edges: .bottom))
     }
 
     private var driverTabs: some View {
@@ -72,7 +71,6 @@ struct RootView: View {
 
             MainTabBar(role: .driver, selectedTab: $selectedTab)
         }
-        .background(Color.tmMist.ignoresSafeArea(edges: .bottom))
     }
 }
 
@@ -117,45 +115,49 @@ private struct MainTabBar: View {
     }
 
     var body: some View {
-        HStack(spacing: role == .driver ? 2 : 5) {
-            ForEach(items) { item in
-                Button {
-                    selectedTab = item.tab
-                } label: {
-                    VStack(spacing: 3) {
-                        Image(systemName: item.icon)
-                            .font(.system(size: 19, weight: .semibold))
-                            .frame(height: 22)
-                            .foregroundStyle(selectedTab == item.tab ? Color.tmGreen : Color.white.opacity(0.62))
-                        Text(item.title)
-                            .font(.system(size: 10, weight: .semibold))
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.72)
-                            .foregroundStyle(selectedTab == item.tab ? Color.white : Color.white.opacity(0.62))
-                    }
-                    .frame(width: role == .driver ? 65 : 72, height: 50)
-                    .background {
-                        if selectedTab == item.tab {
-                            RoundedRectangle(cornerRadius: 18)
-                                .fill(Color.white.opacity(0.12))
-                                .matchedGeometryEffect(id: "selected-tab", in: selectionAnimation)
+        VStack(spacing: 0) {
+            HStack(spacing: role == .driver ? 2 : 5) {
+                ForEach(items) { item in
+                    Button {
+                        selectedTab = item.tab
+                    } label: {
+                        VStack(spacing: 3) {
+                            Image(systemName: item.icon)
+                                .font(.system(size: 19, weight: .semibold))
+                                .frame(height: 22)
+                                .foregroundStyle(selectedTab == item.tab ? Color.tmGreen : Color.white.opacity(0.62))
+                            Text(item.title)
+                                .font(.system(size: 10, weight: .semibold))
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.72)
+                                .foregroundStyle(selectedTab == item.tab ? Color.white : Color.white.opacity(0.62))
                         }
+                        .frame(width: role == .driver ? 65 : 72, height: 50)
+                        .background {
+                            if selectedTab == item.tab {
+                                RoundedRectangle(cornerRadius: 18)
+                                    .fill(Color.white.opacity(0.12))
+                                    .matchedGeometryEffect(id: "selected-tab", in: selectionAnimation)
+                            }
+                        }
+                        .contentShape(Rectangle())
                     }
-                    .contentShape(Rectangle())
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(item.title)
+                    .accessibilityAddTraits(selectedTab == item.tab ? .isSelected : [])
                 }
-                .buttonStyle(.plain)
-                .accessibilityLabel(item.title)
-                .accessibilityAddTraits(selectedTab == item.tab ? .isSelected : [])
             }
+            .animation(.spring(response: 0.38, dampingFraction: 0.88), value: selectedTab)
+            .padding(6)
+            .background(Color(red: 0.04, green: 0.15, blue: 0.12))
+            .clipShape(RoundedRectangle(cornerRadius: 24))
+            .shadow(color: Color.tmInk.opacity(0.18), radius: 12, y: 5)
         }
-        .animation(.spring(response: 0.38, dampingFraction: 0.88), value: selectedTab)
-        .padding(6)
-        .background(Color(red: 0.04, green: 0.15, blue: 0.12))
-        .clipShape(RoundedRectangle(cornerRadius: 24))
-        .shadow(color: Color.tmInk.opacity(0.18), radius: 12, y: 5)
-        .padding(.horizontal, 12)
-        .padding(.top, 7)
-        .padding(.bottom, 6)
+        .frame(maxWidth: .infinity)
+        .padding(.horizontal, 20)
+        .padding(.top, 12)
+        .padding(.bottom, 4)
+        .background(Color.tmMist.ignoresSafeArea(edges: .bottom))
     }
 }
 
