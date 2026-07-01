@@ -2,6 +2,7 @@ import SwiftUI
 
 struct ProfileView: View {
     @EnvironmentObject private var session: AppSession
+    @State private var isShowingLogoutConfirmation = false
 
     var body: some View {
         NavigationStack {
@@ -37,7 +38,7 @@ struct ProfileView: View {
                         SettingsRow(icon: "bell.fill", title: "Trip alerts")
                         SettingsRow(icon: "questionmark.circle.fill", title: "Support")
                         Button {
-                            session.logout()
+                            isShowingLogoutConfirmation = true
                         } label: {
                             SettingsRow(icon: "rectangle.portrait.and.arrow.right.fill", title: "Logout", color: .tmGreen)
                         }
@@ -70,6 +71,14 @@ struct ProfileView: View {
             .background(Color.tmMist.ignoresSafeArea())
             .safeAreaInset(edge: .top, spacing: 0) {
                 RoleSwitchHeader(activeRole: $session.activeRole)
+            }
+            .alert("Log out?", isPresented: $isShowingLogoutConfirmation) {
+                Button("Cancel", role: .cancel) {}
+                Button("Log Out", role: .destructive) {
+                    session.logout()
+                }
+            } message: {
+                Text("Are you sure you want to log out of TriipMate?")
             }
         }
     }
