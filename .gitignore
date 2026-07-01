@@ -50,6 +50,10 @@ fastlane/test_output
 # Local CLI/tooling
 .tools/
 firepit-log.txt
+firebase-data/
+firebase-debug.log
+firestore-debug.log
+firebase-export-*/
 
 # Firebase service config (NEVER commit)
 GoogleService-Info.plist

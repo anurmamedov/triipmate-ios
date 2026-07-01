@@ -6,9 +6,19 @@ struct AuthUser {
     let idToken: String
 }
 
+struct UserProfile {
+    let uid: String
+    let firstName: String
+    let lastName: String
+    let email: String
+    let phone: String
+    let role: AppRole
+}
+
 enum LocalAuthError: LocalizedError {
     case invalidResponse
     case server(String)
+    case profileNotFound
 
     var errorDescription: String? {
         switch self {
@@ -16,6 +26,8 @@ enum LocalAuthError: LocalizedError {
             return "The auth emulator returned an unexpected response."
         case .server(let message):
             return message
+        case .profileNotFound:
+            return "We could not find your local profile data."
         }
     }
 }
@@ -24,49 +36,146 @@ final class AppSession: ObservableObject {
     @Published var isAuthenticated = false
     @Published var activeRole: AppRole = .passenger
     @Published var authUser: AuthUser?
+    @Published var userProfile: UserProfile?
     @Published var authError: String?
     @Published var isAuthWorking = false
 
     private let authService = LocalFirebaseAuthService()
+    private let profileService = LocalFirestoreProfileService()
 
     @MainActor
-    func register(email: String, password: String, confirmPassword: String) async {
+    func register(firstName: String, lastName: String, email: String, phone: String, password: String, confirmPassword: String) async {
         guard password == confirmPassword else {
             authError = "Passwords do not match."
             return
         }
         await performAuth {
-            try await authService.register(email: email, password: password)
+            let authUser = try await authService.register(email: email, password: password)
+            let profile = UserProfile(
+                uid: authUser.uid,
+                firstName: firstName,
+                lastName: lastName,
+                email: email,
+                phone: phone,
+                role: activeRole
+            )
+            try await profileService.save(profile, idToken: authUser.idToken)
+            return (authUser, profile)
         }
     }
 
     @MainActor
     func login(email: String, password: String) async {
         await performAuth {
-            try await authService.login(email: email, password: password)
+            let authUser = try await authService.login(email: email, password: password)
+            let profile = try await profileService.fetch(uid: authUser.uid, idToken: authUser.idToken)
+            return (authUser, profile)
         }
     }
 
     @MainActor
     func logout() {
         authUser = nil
+        userProfile = nil
         isAuthenticated = false
         authError = nil
     }
 
     @MainActor
-    private func performAuth(_ action: () async throws -> AuthUser) async {
+    private func performAuth(_ action: () async throws -> (AuthUser, UserProfile)) async {
         isAuthWorking = true
         authError = nil
         defer { isAuthWorking = false }
 
         do {
-            authUser = try await action()
+            let result = try await action()
+            authUser = result.0
+            userProfile = result.1
+            activeRole = result.1.role
             isAuthenticated = true
         } catch {
             authError = error.localizedDescription
         }
     }
+}
+
+struct LocalFirestoreProfileService {
+    private let projectId = "demo-triipmate-local"
+
+    private var baseURL: URL {
+        URL(string: "http://127.0.0.1:8080/v1/projects/\(projectId)/databases/(default)/documents/users")!
+    }
+
+    func save(_ profile: UserProfile, idToken: String) async throws {
+        var request = URLRequest(url: baseURL.appendingPathComponent(profile.uid))
+        request.httpMethod = "PATCH"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("Bearer \(idToken)", forHTTPHeaderField: "Authorization")
+        request.httpBody = try JSONEncoder().encode(FirestoreUserDocument(fields: .init(profile: profile)))
+
+        let (_, response) = try await URLSession.shared.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse, (200..<300).contains(httpResponse.statusCode) else {
+            throw LocalAuthError.invalidResponse
+        }
+    }
+
+    func fetch(uid: String, idToken: String) async throws -> UserProfile {
+        var request = URLRequest(url: baseURL.appendingPathComponent(uid))
+        request.setValue("Bearer \(idToken)", forHTTPHeaderField: "Authorization")
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw LocalAuthError.invalidResponse
+        }
+
+        if httpResponse.statusCode == 404 {
+            throw LocalAuthError.profileNotFound
+        }
+
+        guard (200..<300).contains(httpResponse.statusCode) else {
+            throw LocalAuthError.invalidResponse
+        }
+
+        let document = try JSONDecoder().decode(FirestoreUserDocument.self, from: data)
+        return document.fields.profile(uid: uid)
+    }
+}
+
+private struct FirestoreUserDocument: Codable {
+    let fields: FirestoreUserFields
+}
+
+private struct FirestoreUserFields: Codable {
+    let firstName: FirestoreStringValue
+    let lastName: FirestoreStringValue
+    let email: FirestoreStringValue
+    let phone: FirestoreStringValue
+    let role: FirestoreStringValue
+    let updatedAt: FirestoreStringValue?
+
+    init(profile: UserProfile) {
+        firstName = FirestoreStringValue(stringValue: profile.firstName)
+        lastName = FirestoreStringValue(stringValue: profile.lastName)
+        email = FirestoreStringValue(stringValue: profile.email)
+        phone = FirestoreStringValue(stringValue: profile.phone)
+        role = FirestoreStringValue(stringValue: profile.role.rawValue)
+        updatedAt = FirestoreStringValue(stringValue: ISO8601DateFormatter().string(from: Date()))
+    }
+
+    func profile(uid: String) -> UserProfile {
+        UserProfile(
+            uid: uid,
+            firstName: firstName.stringValue,
+            lastName: lastName.stringValue,
+            email: email.stringValue,
+            phone: phone.stringValue,
+            role: AppRole(rawValue: role.stringValue) ?? .passenger
+        )
+    }
+}
+
+private struct FirestoreStringValue: Codable {
+    let stringValue: String
 }
 
 struct LocalFirebaseAuthService {
@@ -276,7 +385,14 @@ struct RegisterView: View {
 
             Button {
                 Task {
-                    await session.register(email: email, password: password, confirmPassword: confirmPassword)
+                    await session.register(
+                        firstName: firstName,
+                        lastName: lastName,
+                        email: email,
+                        phone: phone,
+                        password: password,
+                        confirmPassword: confirmPassword
+                    )
                 }
             } label: {
                 HStack {
