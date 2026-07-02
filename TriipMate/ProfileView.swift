@@ -108,7 +108,7 @@ struct ProfileView: View {
 
                     HStack(spacing: 12) {
                         StatTile(value: "4.9", label: "Rating", icon: "star.fill")
-                        StatTile(value: "18", label: "Trips")
+                        StatTile(value: "18", label: "Trips", icon: "car.fill", iconColor: .tmSlate)
                         StatTile(value: "$1.2k", label: "Saved")
                     }
 
@@ -512,6 +512,7 @@ struct StatTile: View {
     let value: String
     let label: String
     var icon: String? = nil
+    var iconColor = Color.tmAmber
 
     var body: some View {
         VStack(spacing: 4) {
@@ -519,7 +520,7 @@ struct StatTile: View {
                 if let icon {
                     Image(systemName: icon)
                         .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(Color.tmAmber)
+                        .foregroundStyle(iconColor)
                 }
                 Text(value)
                     .font(.title3.bold())
