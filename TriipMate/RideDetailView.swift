@@ -7,9 +7,13 @@ struct RideDetailView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 22) {
                 VStack(alignment: .leading, spacing: 10) {
-                    Text("\(ride.from) to \(ride.to)")
+                    Text("\(ride.from) → \(ride.to)")
                         .font(.system(size: 30, weight: .bold))
                         .foregroundStyle(Color.tmInk)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.62)
+                        .allowsTightening(true)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                     Text("\(ride.date) at \(ride.time)")
                         .foregroundStyle(Color.tmSlate)
                 }
@@ -19,7 +23,7 @@ struct RideDetailView: View {
                 detailSection("Trip details") {
                     DetailRow(icon: "clock.fill", title: "Start time", value: ride.time)
                     DetailRow(icon: "clock.badge.checkmark.fill", title: "Expected end time", value: ride.endTime)
-                    DetailRow(icon: "point.topleft.down.curvedto.point.bottomright.up.fill", title: "Route", value: "\(ride.from) / \(ride.to)")
+                    DetailRow(icon: "point.topleft.down.curvedto.point.bottomright.up.fill", title: "Route", value: "\(ride.from) → \(ride.to)")
                     DetailRow(icon: "timer", title: "Trip time", value: ride.tripTime)
                     DetailRow(icon: "person.2.fill", title: "Current available seats", value: "\(ride.seats)")
                     DetailRow(icon: "carseat.left.fill", title: "Total seats", value: "\(ride.totalSeats)")
@@ -137,13 +141,20 @@ struct DetailRow: View {
     let value: String
 
     var body: some View {
-        HStack {
+        HStack(spacing: 12) {
             Label(title, systemImage: icon)
                 .foregroundStyle(Color.tmSlate)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
             Spacer()
             Text(value)
                 .fontWeight(.semibold)
                 .foregroundStyle(Color.tmInk)
+                .lineLimit(1)
+                .minimumScaleFactor(0.6)
+                .allowsTightening(true)
+                .multilineTextAlignment(.trailing)
+                .layoutPriority(1)
         }
     }
 }

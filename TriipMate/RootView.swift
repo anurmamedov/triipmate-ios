@@ -346,7 +346,7 @@ struct PostedTripsView: View {
                         VStack(alignment: .leading, spacing: 12) {
                             HStack {
                                 VStack(alignment: .leading, spacing: 4) {
-                                    Text("\(ride.from) to \(ride.to)")
+                                    Text("\(ride.from) → \(ride.to)")
                                         .font(.headline)
                                         .foregroundStyle(Color.tmInk)
                                     Text("\(ride.date), \(ride.time)")
