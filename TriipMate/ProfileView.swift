@@ -107,7 +107,7 @@ struct ProfileView: View {
                     .clipShape(RoundedRectangle(cornerRadius: 8))
 
                     HStack(spacing: 12) {
-                        StatTile(value: "4.9", label: "Rating")
+                        StatTile(value: "4.9", label: "Rating", icon: "star.fill")
                         StatTile(value: "18", label: "Trips")
                         StatTile(value: "$1.2k", label: "Saved")
                     }
@@ -511,12 +511,20 @@ private struct ProfileImagePicker: UIViewControllerRepresentable {
 struct StatTile: View {
     let value: String
     let label: String
+    var icon: String? = nil
 
     var body: some View {
         VStack(spacing: 4) {
-            Text(value)
-                .font(.title3.bold())
-                .foregroundStyle(Color.tmInk)
+            HStack(spacing: 4) {
+                if let icon {
+                    Image(systemName: icon)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(Color.tmAmber)
+                }
+                Text(value)
+                    .font(.title3.bold())
+                    .foregroundStyle(Color.tmInk)
+            }
             Text(label)
                 .font(.caption)
                 .foregroundStyle(Color.tmSlate)
