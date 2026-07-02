@@ -1,8 +1,11 @@
 import SwiftUI
+import PhotosUI
+import UIKit
 
 struct ProfileView: View {
     @EnvironmentObject private var session: AppSession
     @State private var isShowingLogoutConfirmation = false
+    @State private var selectedPhoto: PhotosPickerItem?
 
     private var displayName: String {
         guard let profile = session.userProfile else {
@@ -27,13 +30,33 @@ struct ProfileView: View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 20) {
-                    VStack(spacing: 10) {
-                        Avatar(initials: displayInitials)
-                            .scaleEffect(1.25)
-                            .padding(.bottom, 8)
+                    VStack(spacing: 12) {
+                        profilePhoto
+                            .padding(.bottom, 10)
+
                         Text(displayName)
                             .font(.title2.bold())
                             .foregroundStyle(Color.tmInk)
+
+                        HStack(spacing: 12) {
+                            Button {
+                            } label: {
+                                Label("Edit profile", systemImage: "pencil")
+                                    .profileActionButton()
+                            }
+                            .buttonStyle(.plain)
+
+                            PhotosPicker(selection: $selectedPhoto, matching: .images) {
+                                Label(session.profileImageData == nil ? "Add photo" : "Edit photo", systemImage: "camera.fill")
+                                    .profileActionButton()
+                            }
+                            .disabled(session.isProfilePhotoWorking)
+                        }
+
+                        if session.isProfilePhotoWorking {
+                            ProgressView()
+                        }
+
                         Label(
                             session.activeRole == .driver ? "Verified driver" : "Verified traveler",
                             systemImage: "checkmark.seal.fill"
@@ -99,6 +122,62 @@ struct ProfileView: View {
             } message: {
                 Text("Are you sure you want to log out of TriipMate?")
             }
+            .onChange(of: selectedPhoto) { newItem in
+                guard let newItem else { return }
+                Task {
+                    await saveProfilePhoto(from: newItem)
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var profilePhoto: some View {
+        ZStack(alignment: .bottomTrailing) {
+            if let data = session.profileImageData, let uiImage = UIImage(data: data) {
+                Image(uiImage: uiImage)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: 118, height: 118)
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+            } else {
+                Avatar(initials: displayInitials)
+                    .scaleEffect(1.65)
+                    .frame(width: 118, height: 118)
+            }
+
+            PhotosPicker(selection: $selectedPhoto, matching: .images) {
+                Image(systemName: "camera.fill")
+                    .font(.headline)
+                    .foregroundStyle(.white)
+                    .frame(width: 34, height: 34)
+                    .background(Color.tmGreen)
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8)
+                            .stroke(.white, lineWidth: 2)
+                    )
+            }
+            .disabled(session.isProfilePhotoWorking)
+            .accessibilityLabel(session.profileImageData == nil ? "Add photo" : "Edit photo")
+        }
+    }
+
+    private func saveProfilePhoto(from item: PhotosPickerItem) async {
+        do {
+            guard let data = try await item.loadTransferable(type: Data.self),
+                  let image = UIImage(data: data),
+                  let jpegData = image.jpegData(compressionQuality: 0.82) else {
+                return
+            }
+            await session.updateProfilePhoto(jpegData)
+            await MainActor.run {
+                selectedPhoto = nil
+            }
+        } catch {
+            await MainActor.run {
+                selectedPhoto = nil
+            }
         }
     }
 
@@ -148,5 +227,17 @@ struct SettingsRow: View {
                 .font(.caption.weight(.bold))
                 .foregroundStyle(Color.tmSlate)
         }
+    }
+}
+
+private extension View {
+    func profileActionButton() -> some View {
+        self
+            .font(.subheadline.weight(.semibold))
+            .foregroundStyle(Color.tmGreen)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 10)
+            .background(Color.tmCloud)
+            .clipShape(RoundedRectangle(cornerRadius: 8))
     }
 }

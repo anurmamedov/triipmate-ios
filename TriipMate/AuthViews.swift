@@ -13,6 +13,7 @@ struct UserProfile {
     let email: String
     let phone: String
     let role: AppRole
+    let profilePhotoPath: String?
 }
 
 enum LocalAuthError: LocalizedError {
@@ -37,11 +38,14 @@ final class AppSession: ObservableObject {
     @Published var activeRole: AppRole = .passenger
     @Published var authUser: AuthUser?
     @Published var userProfile: UserProfile?
+    @Published var profileImageData: Data?
     @Published var authError: String?
     @Published var isAuthWorking = false
+    @Published var isProfilePhotoWorking = false
 
     private let authService = LocalFirebaseAuthService()
     private let profileService = LocalFirestoreProfileService()
+    private let storageService = LocalStorageProfilePhotoService()
 
     @MainActor
     func register(firstName: String, lastName: String, email: String, phone: String, password: String, confirmPassword: String) async {
@@ -57,7 +61,8 @@ final class AppSession: ObservableObject {
                 lastName: lastName,
                 email: email,
                 phone: phone,
-                role: activeRole
+                role: activeRole,
+                profilePhotoPath: nil
             )
             try await profileService.save(profile, idToken: authUser.idToken)
             return (authUser, profile)
@@ -69,6 +74,9 @@ final class AppSession: ObservableObject {
         await performAuth {
             let authUser = try await authService.login(email: email, password: password)
             let profile = try await profileService.fetch(uid: authUser.uid, idToken: authUser.idToken)
+            if let path = profile.profilePhotoPath {
+                profileImageData = try? await storageService.download(path: path, idToken: authUser.idToken)
+            }
             return (authUser, profile)
         }
     }
@@ -77,8 +85,40 @@ final class AppSession: ObservableObject {
     func logout() {
         authUser = nil
         userProfile = nil
+        profileImageData = nil
         isAuthenticated = false
         authError = nil
+    }
+
+    @MainActor
+    func updateProfilePhoto(_ imageData: Data) async {
+        guard let authUser, let userProfile else {
+            authError = "Please log in before adding a profile photo."
+            return
+        }
+
+        isProfilePhotoWorking = true
+        authError = nil
+        defer { isProfilePhotoWorking = false }
+
+        do {
+            let path = "profilePhotos/\(authUser.uid).jpg"
+            try await storageService.upload(imageData: imageData, path: path, idToken: authUser.idToken)
+            let updatedProfile = UserProfile(
+                uid: userProfile.uid,
+                firstName: userProfile.firstName,
+                lastName: userProfile.lastName,
+                email: userProfile.email,
+                phone: userProfile.phone,
+                role: userProfile.role,
+                profilePhotoPath: path
+            )
+            try await profileService.save(updatedProfile, idToken: authUser.idToken)
+            self.userProfile = updatedProfile
+            self.profileImageData = imageData
+        } catch {
+            authError = error.localizedDescription
+        }
     }
 
     @MainActor
@@ -91,11 +131,64 @@ final class AppSession: ObservableObject {
             let result = try await action()
             authUser = result.0
             userProfile = result.1
+            if result.1.profilePhotoPath == nil {
+                profileImageData = nil
+            }
             activeRole = result.1.role
             isAuthenticated = true
         } catch {
             authError = error.localizedDescription
         }
+    }
+}
+
+struct LocalStorageProfilePhotoService {
+    private let bucket = "demo-triipmate-local.appspot.com"
+
+    private var baseURL: URL {
+        URL(string: "http://127.0.0.1:9199/v0/b/\(bucket)/o")!
+    }
+
+    func upload(imageData: Data, path: String, idToken: String) async throws {
+        var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false)!
+        components.queryItems = [
+            URLQueryItem(name: "uploadType", value: "media"),
+            URLQueryItem(name: "name", value: path)
+        ]
+
+        var request = URLRequest(url: components.url!)
+        request.httpMethod = "POST"
+        request.setValue("image/jpeg", forHTTPHeaderField: "Content-Type")
+        request.setValue("Bearer \(idToken)", forHTTPHeaderField: "Authorization")
+        request.httpBody = imageData
+
+        let (_, response) = try await URLSession.shared.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse, (200..<300).contains(httpResponse.statusCode) else {
+            throw LocalAuthError.invalidResponse
+        }
+    }
+
+    func download(path: String, idToken: String) async throws -> Data {
+        let encodedPath = path.storagePathEncoded
+        var components = URLComponents(string: "\(baseURL.absoluteString)/\(encodedPath)")!
+        components.queryItems = [URLQueryItem(name: "alt", value: "media")]
+
+        var request = URLRequest(url: components.url!)
+        request.setValue("Bearer \(idToken)", forHTTPHeaderField: "Authorization")
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse, (200..<300).contains(httpResponse.statusCode) else {
+            throw LocalAuthError.invalidResponse
+        }
+        return data
+    }
+}
+
+private extension String {
+    var storagePathEncoded: String {
+        var allowed = CharacterSet.urlPathAllowed
+        allowed.remove(charactersIn: "/")
+        return addingPercentEncoding(withAllowedCharacters: allowed) ?? self
     }
 }
 
@@ -151,6 +244,7 @@ private struct FirestoreUserFields: Codable {
     let email: FirestoreStringValue
     let phone: FirestoreStringValue
     let role: FirestoreStringValue
+    let profilePhotoPath: FirestoreStringValue?
     let updatedAt: FirestoreStringValue?
 
     init(profile: UserProfile) {
@@ -159,6 +253,7 @@ private struct FirestoreUserFields: Codable {
         email = FirestoreStringValue(stringValue: profile.email)
         phone = FirestoreStringValue(stringValue: profile.phone)
         role = FirestoreStringValue(stringValue: profile.role.rawValue)
+        profilePhotoPath = profile.profilePhotoPath.map(FirestoreStringValue.init(stringValue:))
         updatedAt = FirestoreStringValue(stringValue: ISO8601DateFormatter().string(from: Date()))
     }
 
@@ -169,7 +264,8 @@ private struct FirestoreUserFields: Codable {
             lastName: lastName.stringValue,
             email: email.stringValue,
             phone: phone.stringValue,
-            role: AppRole(rawValue: role.stringValue) ?? .passenger
+            role: AppRole(rawValue: role.stringValue) ?? .passenger,
+            profilePhotoPath: profilePhotoPath?.stringValue
         )
     }
 }
