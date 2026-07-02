@@ -133,7 +133,12 @@ struct ProfileView: View {
                             .font(.headline)
                             .foregroundStyle(Color.tmInk)
                         if session.activeRole == .driver {
-                            SettingsRow(icon: "car.fill", title: "Vehicle details")
+                            NavigationLink {
+                                VehicleDetailsView()
+                            } label: {
+                                SettingsRow(icon: "car.fill", title: "Vehicle details")
+                            }
+                            .buttonStyle(.plain)
                             SettingsRow(icon: "person.2.badge.gearshape.fill", title: "Passenger requests")
                             SettingsRow(icon: "dollarsign.circle.fill", title: "Payout setup")
                         } else {
@@ -210,6 +215,158 @@ struct ProfileView: View {
             .prefix(2)
         let value = words.compactMap(\.first).map(String.init).joined()
         return value.isEmpty ? "TM" : value.uppercased()
+    }
+}
+
+struct VehicleDetailsView: View {
+    @EnvironmentObject private var session: AppSession
+    @State private var editingVehicleID: String?
+    @State private var make = ""
+    @State private var model = ""
+    @State private var year = ""
+    @State private var powerType = "Fuel"
+    @State private var bodyType = "Sedan"
+    @State private var validationMessage: String?
+
+    var body: some View {
+        Form {
+            if !session.savedVehicles.isEmpty {
+                Section("Saved vehicles") {
+                    ForEach(session.savedVehicles) { vehicle in
+                        Button {
+                            load(vehicle)
+                        } label: {
+                            HStack(spacing: 12) {
+                                Image(systemName: "car.fill")
+                                    .foregroundStyle(Color.tmGreen)
+                                    .frame(width: 28)
+                                VStack(alignment: .leading, spacing: 3) {
+                                    Text(vehicle.displayName)
+                                        .font(.body.weight(.semibold))
+                                        .foregroundStyle(Color.tmInk)
+                                    Text("\(vehicle.powerType) · \(vehicle.bodyType)")
+                                        .font(.caption)
+                                        .foregroundStyle(Color.tmSlate)
+                                }
+                                Spacer()
+                                if editingVehicleID == vehicle.id {
+                                    Image(systemName: "checkmark.circle.fill")
+                                        .foregroundStyle(Color.tmGreen)
+                                }
+                            }
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+
+            Section(editingVehicleID == nil ? "Add vehicle" : "Edit vehicle") {
+                TextField("Car make", text: $make)
+                    .textContentType(.organizationName)
+                TextField("Car model", text: $model)
+                TextField("Car year", text: $year)
+                    .keyboardType(.numberPad)
+                    .onChange(of: year) { value in
+                        year = String(value.filter { $0.isNumber }.prefix(4))
+                    }
+                Picker("Power type", selection: $powerType) {
+                    Text("Fuel").tag("Fuel")
+                    Text("Electric").tag("Electric")
+                    Text("Hybrid").tag("Hybrid")
+                }
+                Picker("Body type", selection: $bodyType) {
+                    Text("Sedan").tag("Sedan")
+                    Text("SUV").tag("SUV")
+                    Text("Van").tag("Van")
+                    Text("Truck").tag("Truck")
+                    Text("Hatchback").tag("Hatchback")
+                }
+            }
+
+            if let message = validationMessage ?? session.authError {
+                Section {
+                    Label(message, systemImage: "exclamationmark.triangle.fill")
+                        .font(.footnote)
+                        .foregroundStyle(.red)
+                }
+            }
+
+            Section {
+                Button {
+                    save()
+                } label: {
+                    HStack {
+                        Spacer()
+                        if session.isVehicleWorking {
+                            ProgressView()
+                        } else {
+                            Label(editingVehicleID == nil ? "Save vehicle" : "Update vehicle", systemImage: "checkmark.circle.fill")
+                                .font(.headline)
+                        }
+                        Spacer()
+                    }
+                }
+                .disabled(session.isVehicleWorking)
+            }
+        }
+        .scrollContentBackground(.hidden)
+        .background(Color.tmMist)
+        .navigationTitle("Vehicle details")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            if editingVehicleID != nil {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Add New") { clearForm() }
+                }
+            }
+        }
+        .tint(Color.tmGreen)
+    }
+
+    private func load(_ vehicle: SavedVehicle) {
+        editingVehicleID = vehicle.id
+        make = vehicle.make
+        model = vehicle.model
+        year = vehicle.year
+        powerType = vehicle.powerType
+        bodyType = vehicle.bodyType
+        validationMessage = nil
+        session.authError = nil
+    }
+
+    private func clearForm() {
+        editingVehicleID = nil
+        make = ""
+        model = ""
+        year = ""
+        powerType = "Fuel"
+        bodyType = "Sedan"
+        validationMessage = nil
+        session.authError = nil
+    }
+
+    private func save() {
+        let cleanMake = make.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleanModel = model.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanMake.isEmpty, !cleanModel.isEmpty, year.count == 4 else {
+            validationMessage = "Enter the vehicle make, model, and four-digit year."
+            return
+        }
+
+        validationMessage = nil
+        let vehicle = SavedVehicle(
+            id: editingVehicleID ?? UUID().uuidString,
+            make: cleanMake,
+            model: cleanModel,
+            year: year,
+            powerType: powerType,
+            bodyType: bodyType
+        )
+        Task {
+            if await session.saveVehicle(vehicle) {
+                load(vehicle)
+            }
+        }
     }
 }
 

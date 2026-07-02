@@ -12,6 +12,7 @@ struct PublishTripView: View {
     @State private var totalSeats = 4
     @State private var seats = 2
     @State private var price = 120.0
+    @State private var selectedVehicleID = "new"
     @State private var carMake = ""
     @State private var carModel = ""
     @State private var carYear = ""
@@ -71,19 +72,33 @@ struct PublishTripView: View {
                 }
 
                 Section("Vehicle") {
-                    TextField("Car make", text: $carMake)
-                    TextField("Car model", text: $carModel)
-                    TextField("Car year", text: $carYear)
-                        .keyboardType(.numberPad)
-                    Picker("Power type", selection: $powerType) {
-                        Text("Fuel").tag("Fuel")
-                        Text("Electric").tag("Electric")
-                        Text("Hybrid").tag("Hybrid")
+                    if !session.savedVehicles.isEmpty {
+                        Picker("Use vehicle", selection: $selectedVehicleID) {
+                            ForEach(session.savedVehicles) { vehicle in
+                                Text(vehicle.displayName).tag(vehicle.id)
+                            }
+                            Text("Enter new vehicle").tag("new")
+                        }
                     }
-                    Picker("Body type", selection: $bodyType) {
-                        Text("Sedan").tag("Sedan")
-                        Text("Van").tag("Van")
-                        Text("SUV").tag("SUV")
+
+                    if let selectedVehicle {
+                        HStack(spacing: 12) {
+                            Image(systemName: "car.fill")
+                                .font(.title3)
+                                .foregroundStyle(Color.tmGreen)
+                                .frame(width: 32)
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(selectedVehicle.displayName)
+                                    .font(.body.weight(.semibold))
+                                    .foregroundStyle(Color.tmInk)
+                                Text("\(selectedVehicle.powerType) · \(selectedVehicle.bodyType)")
+                                    .font(.caption)
+                                    .foregroundStyle(Color.tmSlate)
+                            }
+                        }
+                        .padding(.vertical, 4)
+                    } else {
+                        newVehicleFields
                     }
                 }
 
@@ -106,7 +121,40 @@ struct PublishTripView: View {
             }
             .scrollContentBackground(.hidden)
             .background(Color.tmMist)
+            .onAppear(perform: selectDefaultVehicle)
         }
+    }
+
+    private var selectedVehicle: SavedVehicle? {
+        session.savedVehicles.first { $0.id == selectedVehicleID }
+    }
+
+    @ViewBuilder
+    private var newVehicleFields: some View {
+        TextField("Car make", text: $carMake)
+        TextField("Car model", text: $carModel)
+        TextField("Car year", text: $carYear)
+            .keyboardType(.numberPad)
+            .onChange(of: carYear) { value in
+                carYear = String(value.filter { $0.isNumber }.prefix(4))
+            }
+        Picker("Power type", selection: $powerType) {
+            Text("Fuel").tag("Fuel")
+            Text("Electric").tag("Electric")
+            Text("Hybrid").tag("Hybrid")
+        }
+        Picker("Body type", selection: $bodyType) {
+            Text("Sedan").tag("Sedan")
+            Text("SUV").tag("SUV")
+            Text("Van").tag("Van")
+            Text("Truck").tag("Truck")
+            Text("Hatchback").tag("Hatchback")
+        }
+    }
+
+    private func selectDefaultVehicle() {
+        guard selectedVehicleID == "new", let firstVehicle = session.savedVehicles.first else { return }
+        selectedVehicleID = firstVehicle.id
     }
 
     private var publishAction: some View {

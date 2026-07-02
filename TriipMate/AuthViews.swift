@@ -16,6 +16,19 @@ struct UserProfile {
     let profilePhotoPath: String?
 }
 
+struct SavedVehicle: Identifiable, Hashable {
+    let id: String
+    let make: String
+    let model: String
+    let year: String
+    let powerType: String
+    let bodyType: String
+
+    var displayName: String {
+        "\(year) \(make) \(model)".trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+}
+
 enum LocalAuthError: LocalizedError {
     case invalidResponse
     case server(String)
@@ -39,14 +52,17 @@ final class AppSession: ObservableObject {
     @Published var authUser: AuthUser?
     @Published var userProfile: UserProfile?
     @Published var profileImageData: Data?
+    @Published var savedVehicles: [SavedVehicle] = []
     @Published var authError: String?
     @Published var isAuthWorking = false
     @Published var isProfileWorking = false
     @Published var isProfilePhotoWorking = false
+    @Published var isVehicleWorking = false
 
     private let authService = LocalFirebaseAuthService()
     private let profileService = LocalFirestoreProfileService()
     private let storageService = LocalStorageProfilePhotoService()
+    private let vehicleService = LocalFirestoreVehicleService()
 
     @MainActor
     func register(firstName: String, lastName: String, email: String, phone: String, password: String, confirmPassword: String) async {
@@ -78,6 +94,7 @@ final class AppSession: ObservableObject {
             if let path = profile.profilePhotoPath {
                 profileImageData = try? await storageService.download(path: path, idToken: authUser.idToken)
             }
+            savedVehicles = (try? await vehicleService.fetchAll(uid: authUser.uid, idToken: authUser.idToken)) ?? []
             return (authUser, profile)
         }
     }
@@ -87,6 +104,7 @@ final class AppSession: ObservableObject {
         authUser = nil
         userProfile = nil
         profileImageData = nil
+        savedVehicles = []
         isAuthenticated = false
         authError = nil
     }
@@ -158,6 +176,32 @@ final class AppSession: ObservableObject {
             userProfile = updatedProfile
         } catch {
             authError = error.localizedDescription
+        }
+    }
+
+    @MainActor
+    func saveVehicle(_ vehicle: SavedVehicle) async -> Bool {
+        guard let authUser else {
+            authError = "Please log in before saving a vehicle."
+            return false
+        }
+
+        isVehicleWorking = true
+        authError = nil
+        defer { isVehicleWorking = false }
+
+        do {
+            try await vehicleService.save(vehicle, uid: authUser.uid, idToken: authUser.idToken)
+            if let index = savedVehicles.firstIndex(where: { $0.id == vehicle.id }) {
+                savedVehicles[index] = vehicle
+            } else {
+                savedVehicles.append(vehicle)
+            }
+            savedVehicles.sort { $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending }
+            return true
+        } catch {
+            authError = error.localizedDescription
+            return false
         }
     }
 
@@ -272,6 +316,85 @@ struct LocalFirestoreProfileService {
         let document = try JSONDecoder().decode(FirestoreUserDocument.self, from: data)
         return document.fields.profile(uid: uid)
     }
+}
+
+struct LocalFirestoreVehicleService {
+    private let projectId = "demo-triipmate-local"
+
+    private var usersURL: URL {
+        URL(string: "http://127.0.0.1:8080/v1/projects/\(projectId)/databases/(default)/documents/users")!
+    }
+
+    func save(_ vehicle: SavedVehicle, uid: String, idToken: String) async throws {
+        let url = usersURL
+            .appendingPathComponent(uid)
+            .appendingPathComponent("vehicles")
+            .appendingPathComponent(vehicle.id)
+        var request = URLRequest(url: url)
+        request.httpMethod = "PATCH"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("Bearer \(idToken)", forHTTPHeaderField: "Authorization")
+        request.httpBody = try JSONEncoder().encode(
+            FirestoreVehicleDocument(fields: [
+                "make": FirestoreStringValue(stringValue: vehicle.make),
+                "model": FirestoreStringValue(stringValue: vehicle.model),
+                "year": FirestoreStringValue(stringValue: vehicle.year),
+                "powerType": FirestoreStringValue(stringValue: vehicle.powerType),
+                "bodyType": FirestoreStringValue(stringValue: vehicle.bodyType)
+            ])
+        )
+
+        let (_, response) = try await URLSession.shared.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse,
+              (200..<300).contains(httpResponse.statusCode) else {
+            throw LocalAuthError.invalidResponse
+        }
+    }
+
+    func fetchAll(uid: String, idToken: String) async throws -> [SavedVehicle] {
+        let url = usersURL.appendingPathComponent(uid).appendingPathComponent("vehicles")
+        var request = URLRequest(url: url)
+        request.setValue("Bearer \(idToken)", forHTTPHeaderField: "Authorization")
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse,
+              (200..<300).contains(httpResponse.statusCode) else {
+            throw LocalAuthError.invalidResponse
+        }
+
+        let collection = try JSONDecoder().decode(FirestoreVehicleCollection.self, from: data)
+        return (collection.documents ?? []).compactMap { document in
+            let fields = document.fields
+            guard let make = fields["make"]?.stringValue,
+                  let model = fields["model"]?.stringValue,
+                  let year = fields["year"]?.stringValue else {
+                return nil
+            }
+            return SavedVehicle(
+                id: document.name?.split(separator: "/").last.map(String.init) ?? UUID().uuidString,
+                make: make,
+                model: model,
+                year: year,
+                powerType: fields["powerType"]?.stringValue ?? "Fuel",
+                bodyType: fields["bodyType"]?.stringValue ?? "Sedan"
+            )
+        }
+        .sorted { $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending }
+    }
+}
+
+private struct FirestoreVehicleDocument: Codable {
+    let name: String?
+    let fields: [String: FirestoreStringValue]
+
+    init(name: String? = nil, fields: [String: FirestoreStringValue]) {
+        self.name = name
+        self.fields = fields
+    }
+}
+
+private struct FirestoreVehicleCollection: Decodable {
+    let documents: [FirestoreVehicleDocument]?
 }
 
 private struct FirestoreUserDocument: Codable {
