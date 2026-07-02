@@ -41,6 +41,7 @@ final class AppSession: ObservableObject {
     @Published var profileImageData: Data?
     @Published var authError: String?
     @Published var isAuthWorking = false
+    @Published var isProfileWorking = false
     @Published var isProfilePhotoWorking = false
 
     private let authService = LocalFirebaseAuthService()
@@ -116,6 +117,45 @@ final class AppSession: ObservableObject {
             try await profileService.save(updatedProfile, idToken: authUser.idToken)
             self.userProfile = updatedProfile
             self.profileImageData = imageData
+        } catch {
+            authError = error.localizedDescription
+        }
+    }
+
+    @MainActor
+    func updateProfile(firstName: String, lastName: String, email: String, phone: String) async {
+        guard let currentAuthUser = authUser, let currentProfile = userProfile else {
+            authError = "Please log in before editing your profile."
+            return
+        }
+
+        isProfileWorking = true
+        authError = nil
+        defer { isProfileWorking = false }
+
+        do {
+            let updatedAuthUser: AuthUser
+            if email.caseInsensitiveCompare(currentAuthUser.email) == .orderedSame {
+                updatedAuthUser = currentAuthUser
+            } else {
+                updatedAuthUser = try await authService.updateEmail(
+                    idToken: currentAuthUser.idToken,
+                    email: email
+                )
+            }
+
+            let updatedProfile = UserProfile(
+                uid: currentProfile.uid,
+                firstName: firstName,
+                lastName: lastName,
+                email: email,
+                phone: phone,
+                role: currentProfile.role,
+                profilePhotoPath: currentProfile.profilePhotoPath
+            )
+            try await profileService.save(updatedProfile, idToken: updatedAuthUser.idToken)
+            authUser = updatedAuthUser
+            userProfile = updatedProfile
         } catch {
             authError = error.localizedDescription
         }
@@ -286,6 +326,34 @@ struct LocalFirebaseAuthService {
         try await sendAuthRequest(endpoint: "accounts:signInWithPassword", email: email, password: password)
     }
 
+    func updateEmail(idToken: String, email: String) async throws -> AuthUser {
+        var components = URLComponents(url: baseURL.appendingPathComponent("accounts:update"), resolvingAgainstBaseURL: false)!
+        components.queryItems = [URLQueryItem(name: "key", value: apiKey)]
+
+        var request = URLRequest(url: components.url!)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONEncoder().encode(
+            UpdateEmailRequest(idToken: idToken, email: email, returnSecureToken: true)
+        )
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw LocalAuthError.invalidResponse
+        }
+
+        if (200..<300).contains(httpResponse.statusCode) {
+            let authResponse = try JSONDecoder().decode(AuthResponse.self, from: data)
+            return AuthUser(uid: authResponse.localId, email: authResponse.email, idToken: authResponse.idToken)
+        }
+
+        if let errorResponse = try? JSONDecoder().decode(AuthErrorResponse.self, from: data) {
+            throw LocalAuthError.server(errorResponse.error.message.authFriendlyMessage)
+        }
+
+        throw LocalAuthError.invalidResponse
+    }
+
     private func sendAuthRequest(endpoint: String, email: String, password: String) async throws -> AuthUser {
         var components = URLComponents(url: baseURL.appendingPathComponent(endpoint), resolvingAgainstBaseURL: false)!
         components.queryItems = [URLQueryItem(name: "key", value: apiKey)]
@@ -316,6 +384,12 @@ struct LocalFirebaseAuthService {
 private struct AuthRequest: Encodable {
     let email: String
     let password: String
+    let returnSecureToken: Bool
+}
+
+private struct UpdateEmailRequest: Encodable {
+    let idToken: String
+    let email: String
     let returnSecureToken: Bool
 }
 

@@ -5,7 +5,7 @@ import UIKit
 struct ProfileView: View {
     @EnvironmentObject private var session: AppSession
     @State private var isShowingLogoutConfirmation = false
-    @State private var selectedPhoto: PhotosPickerItem?
+    @State private var isShowingProfileEditor = false
 
     private var displayName: String {
         guard let profile = session.userProfile else {
@@ -37,25 +37,6 @@ struct ProfileView: View {
                         Text(displayName)
                             .font(.title2.bold())
                             .foregroundStyle(Color.tmInk)
-
-                        HStack(spacing: 12) {
-                            Button {
-                            } label: {
-                                Label("Edit profile", systemImage: "pencil")
-                                    .profileActionButton()
-                            }
-                            .buttonStyle(.plain)
-
-                            PhotosPicker(selection: $selectedPhoto, matching: .images) {
-                                Label(session.profileImageData == nil ? "Add photo" : "Edit photo", systemImage: "camera.fill")
-                                    .profileActionButton()
-                            }
-                            .disabled(session.isProfilePhotoWorking)
-                        }
-
-                        if session.isProfilePhotoWorking {
-                            ProgressView()
-                        }
 
                         Label(
                             session.activeRole == .driver ? "Verified driver" : "Verified traveler",
@@ -122,11 +103,11 @@ struct ProfileView: View {
             } message: {
                 Text("Are you sure you want to log out of TriipMate?")
             }
-            .onChange(of: selectedPhoto) { newItem in
-                guard let newItem else { return }
-                Task {
-                    await saveProfilePhoto(from: newItem)
-                }
+            .sheet(isPresented: $isShowingProfileEditor) {
+                EditProfileInformationView()
+                    .environmentObject(session)
+                    .presentationDetents([.large])
+                    .presentationDragIndicator(.visible)
             }
         }
     }
@@ -146,11 +127,13 @@ struct ProfileView: View {
                     .frame(width: 118, height: 118)
             }
 
-            PhotosPicker(selection: $selectedPhoto, matching: .images) {
-                Image(systemName: "camera.fill")
-                    .font(.headline)
+            Button {
+                isShowingProfileEditor = true
+            } label: {
+                Image(systemName: "pencil")
+                    .font(.subheadline.weight(.bold))
                     .foregroundStyle(.white)
-                    .frame(width: 34, height: 34)
+                    .frame(width: 36, height: 36)
                     .background(Color.tmGreen)
                     .clipShape(RoundedRectangle(cornerRadius: 8))
                     .overlay(
@@ -158,26 +141,9 @@ struct ProfileView: View {
                             .stroke(.white, lineWidth: 2)
                     )
             }
-            .disabled(session.isProfilePhotoWorking)
-            .accessibilityLabel(session.profileImageData == nil ? "Add photo" : "Edit photo")
-        }
-    }
-
-    private func saveProfilePhoto(from item: PhotosPickerItem) async {
-        do {
-            guard let data = try await item.loadTransferable(type: Data.self),
-                  let image = UIImage(data: data),
-                  let jpegData = image.jpegData(compressionQuality: 0.82) else {
-                return
-            }
-            await session.updateProfilePhoto(jpegData)
-            await MainActor.run {
-                selectedPhoto = nil
-            }
-        } catch {
-            await MainActor.run {
-                selectedPhoto = nil
-            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Edit profile")
+            .offset(x: 9, y: 9)
         }
     }
 
@@ -187,6 +153,259 @@ struct ProfileView: View {
             .prefix(2)
         let value = words.compactMap(\.first).map(String.init).joined()
         return value.isEmpty ? "TM" : value.uppercased()
+    }
+}
+
+struct EditProfileInformationView: View {
+    @EnvironmentObject private var session: AppSession
+    @Environment(\.dismiss) private var dismiss
+    @State private var firstName = ""
+    @State private var lastName = ""
+    @State private var email = ""
+    @State private var countryCode = "+1"
+    @State private var phone = ""
+    @State private var pendingPhotoData: Data?
+    @State private var imagePickerSource: UIImagePickerController.SourceType = .photoLibrary
+    @State private var isShowingPhotoSource = false
+    @State private var isShowingImagePicker = false
+    @State private var validationMessage: String?
+
+    private let countryCodes = ["+1", "+44", "+61", "+90", "+91", "+993"]
+
+    private var displayedPhotoData: Data? {
+        pendingPhotoData ?? session.profileImageData
+    }
+
+    private var isSaving: Bool {
+        session.isProfileWorking || session.isProfilePhotoWorking
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    VStack(spacing: 10) {
+                        ZStack(alignment: .bottomTrailing) {
+                            profilePreview
+
+                            Button {
+                                isShowingPhotoSource = true
+                            } label: {
+                                Image(systemName: "camera.fill")
+                                    .font(.subheadline.weight(.bold))
+                                    .foregroundStyle(.white)
+                                    .frame(width: 36, height: 36)
+                                    .background(Color.tmGreen)
+                                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                                    .overlay {
+                                        RoundedRectangle(cornerRadius: 8)
+                                            .stroke(.white, lineWidth: 2)
+                                    }
+                            }
+                            .buttonStyle(.plain)
+                            .offset(x: 7, y: 7)
+                            .accessibilityLabel("Change profile photo")
+                        }
+
+                        Text("Profile photo")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(Color.tmSlate)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 10)
+                }
+
+                Section("Personal information") {
+                    TextField("First name", text: $firstName)
+                        .textContentType(.givenName)
+                    TextField("Last name", text: $lastName)
+                        .textContentType(.familyName)
+                }
+
+                Section("Contact information") {
+                    TextField("Email", text: $email)
+                        .textContentType(.emailAddress)
+                        .keyboardType(.emailAddress)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                    HStack(spacing: 12) {
+                        Picker("Country code", selection: $countryCode) {
+                            ForEach(countryCodes, id: \.self) { code in
+                                Text(code).tag(code)
+                            }
+                        }
+                        .pickerStyle(.menu)
+                        .frame(minWidth: 76, alignment: .leading)
+
+                        Divider()
+
+                        TextField("Phone number", text: $phone)
+                            .textContentType(.telephoneNumber)
+                            .keyboardType(.phonePad)
+                    }
+                }
+
+                if let message = validationMessage ?? session.authError {
+                    Section {
+                        Label(message, systemImage: "exclamationmark.triangle.fill")
+                            .font(.footnote)
+                            .foregroundStyle(.red)
+                    }
+                }
+            }
+            .scrollContentBackground(.hidden)
+            .background(Color.tmMist)
+            .navigationTitle("Personal information")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                        .disabled(isSaving)
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button {
+                        save()
+                    } label: {
+                        if isSaving {
+                            ProgressView()
+                        } else {
+                            Text("Save").bold()
+                        }
+                    }
+                    .disabled(isSaving)
+                }
+            }
+            .onAppear(perform: loadProfile)
+            .confirmationDialog("Profile photo", isPresented: $isShowingPhotoSource) {
+                if UIImagePickerController.isSourceTypeAvailable(.camera) {
+                    Button("Take Photo") {
+                        imagePickerSource = .camera
+                        isShowingImagePicker = true
+                    }
+                }
+                Button("Choose from Photo Library") {
+                    imagePickerSource = .photoLibrary
+                    isShowingImagePicker = true
+                }
+                Button("Cancel", role: .cancel) {}
+            }
+            .sheet(isPresented: $isShowingImagePicker) {
+                ProfileImagePicker(sourceType: imagePickerSource, imageData: $pendingPhotoData)
+                    .ignoresSafeArea()
+            }
+        }
+        .tint(Color.tmGreen)
+    }
+
+    @ViewBuilder
+    private var profilePreview: some View {
+        if let data = displayedPhotoData, let image = UIImage(data: data) {
+            Image(uiImage: image)
+                .resizable()
+                .scaledToFill()
+                .frame(width: 104, height: 104)
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+        } else {
+            Avatar(initials: initials)
+                .scaleEffect(1.5)
+                .frame(width: 104, height: 104)
+        }
+    }
+
+    private var initials: String {
+        let letters = [firstName.first, lastName.first].compactMap { $0 }
+        return letters.isEmpty ? "TM" : String(letters).uppercased()
+    }
+
+    private func loadProfile() {
+        guard let profile = session.userProfile else { return }
+        firstName = profile.firstName
+        lastName = profile.lastName
+        email = profile.email
+        let phoneParts = profile.phone.split(separator: " ", maxSplits: 1).map(String.init)
+        if let savedCode = phoneParts.first, countryCodes.contains(savedCode) {
+            countryCode = savedCode
+            phone = phoneParts.count > 1 ? phoneParts[1] : ""
+        } else {
+            phone = profile.phone
+        }
+        session.authError = nil
+    }
+
+    private func save() {
+        let cleanFirstName = firstName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleanLastName = lastName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleanEmail = email.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleanPhone = phone.trimmingCharacters(in: .whitespacesAndNewlines)
+        let formattedPhone = cleanPhone.isEmpty ? "" : "\(countryCode) \(cleanPhone)"
+
+        guard !cleanFirstName.isEmpty, !cleanLastName.isEmpty else {
+            validationMessage = "First and last name are required."
+            return
+        }
+        guard cleanEmail.contains("@") else {
+            validationMessage = "Enter a valid email address."
+            return
+        }
+
+        validationMessage = nil
+        Task {
+            await session.updateProfile(
+                firstName: cleanFirstName,
+                lastName: cleanLastName,
+                email: cleanEmail,
+                phone: formattedPhone
+            )
+            guard session.authError == nil else { return }
+
+            if let pendingPhotoData {
+                await session.updateProfilePhoto(pendingPhotoData)
+            }
+            if session.authError == nil {
+                dismiss()
+            }
+        }
+    }
+}
+
+private struct ProfileImagePicker: UIViewControllerRepresentable {
+    let sourceType: UIImagePickerController.SourceType
+    @Binding var imageData: Data?
+    @Environment(\.dismiss) private var dismiss
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(parent: self)
+    }
+
+    func makeUIViewController(context: Context) -> UIImagePickerController {
+        let picker = UIImagePickerController()
+        picker.sourceType = sourceType
+        picker.delegate = context.coordinator
+        picker.allowsEditing = true
+        return picker
+    }
+
+    func updateUIViewController(_ uiViewController: UIImagePickerController, context: Context) {}
+
+    final class Coordinator: NSObject, UINavigationControllerDelegate, UIImagePickerControllerDelegate {
+        private let parent: ProfileImagePicker
+
+        init(parent: ProfileImagePicker) {
+            self.parent = parent
+        }
+
+        func imagePickerController(
+            _ picker: UIImagePickerController,
+            didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey: Any]
+        ) {
+            let image = (info[.editedImage] ?? info[.originalImage]) as? UIImage
+            parent.imageData = image?.jpegData(compressionQuality: 0.82)
+            parent.dismiss()
+        }
+
+        func imagePickerControllerDidCancel(_ picker: UIImagePickerController) {
+            parent.dismiss()
+        }
     }
 }
 
@@ -227,17 +446,5 @@ struct SettingsRow: View {
                 .font(.caption.weight(.bold))
                 .foregroundStyle(Color.tmSlate)
         }
-    }
-}
-
-private extension View {
-    func profileActionButton() -> some View {
-        self
-            .font(.subheadline.weight(.semibold))
-            .foregroundStyle(Color.tmGreen)
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 10)
-            .background(Color.tmCloud)
-            .clipShape(RoundedRectangle(cornerRadius: 8))
     }
 }
