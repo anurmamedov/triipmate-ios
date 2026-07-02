@@ -2,6 +2,63 @@ import SwiftUI
 import PhotosUI
 import UIKit
 
+private struct PhoneCountry: Identifiable {
+    let id: String
+    let name: String
+    let flag: String
+    let dialCode: String
+}
+
+private let northAmericanPhoneCountries = [
+    PhoneCountry(id: "CA", name: "Canada", flag: "🇨🇦", dialCode: "+1"),
+    PhoneCountry(id: "US", name: "United States", flag: "🇺🇸", dialCode: "+1")
+]
+
+private let europeanPhoneCountries = [
+    PhoneCountry(id: "AT", name: "Austria", flag: "🇦🇹", dialCode: "+43"),
+    PhoneCountry(id: "BE", name: "Belgium", flag: "🇧🇪", dialCode: "+32"),
+    PhoneCountry(id: "CZ", name: "Czechia", flag: "🇨🇿", dialCode: "+420"),
+    PhoneCountry(id: "DK", name: "Denmark", flag: "🇩🇰", dialCode: "+45"),
+    PhoneCountry(id: "FI", name: "Finland", flag: "🇫🇮", dialCode: "+358"),
+    PhoneCountry(id: "FR", name: "France", flag: "🇫🇷", dialCode: "+33"),
+    PhoneCountry(id: "DE", name: "Germany", flag: "🇩🇪", dialCode: "+49"),
+    PhoneCountry(id: "GR", name: "Greece", flag: "🇬🇷", dialCode: "+30"),
+    PhoneCountry(id: "IE", name: "Ireland", flag: "🇮🇪", dialCode: "+353"),
+    PhoneCountry(id: "IT", name: "Italy", flag: "🇮🇹", dialCode: "+39"),
+    PhoneCountry(id: "NL", name: "Netherlands", flag: "🇳🇱", dialCode: "+31"),
+    PhoneCountry(id: "NO", name: "Norway", flag: "🇳🇴", dialCode: "+47"),
+    PhoneCountry(id: "PL", name: "Poland", flag: "🇵🇱", dialCode: "+48"),
+    PhoneCountry(id: "PT", name: "Portugal", flag: "🇵🇹", dialCode: "+351"),
+    PhoneCountry(id: "RO", name: "Romania", flag: "🇷🇴", dialCode: "+40"),
+    PhoneCountry(id: "ES", name: "Spain", flag: "🇪🇸", dialCode: "+34"),
+    PhoneCountry(id: "SE", name: "Sweden", flag: "🇸🇪", dialCode: "+46"),
+    PhoneCountry(id: "CH", name: "Switzerland", flag: "🇨🇭", dialCode: "+41"),
+    PhoneCountry(id: "UA", name: "Ukraine", flag: "🇺🇦", dialCode: "+380"),
+    PhoneCountry(id: "GB", name: "United Kingdom", flag: "🇬🇧", dialCode: "+44"),
+]
+
+private let southAsianPhoneCountries = [
+    PhoneCountry(id: "AF", name: "Afghanistan", flag: "🇦🇫", dialCode: "+93"),
+    PhoneCountry(id: "BD", name: "Bangladesh", flag: "🇧🇩", dialCode: "+880"),
+    PhoneCountry(id: "BT", name: "Bhutan", flag: "🇧🇹", dialCode: "+975"),
+    PhoneCountry(id: "IN", name: "India", flag: "🇮🇳", dialCode: "+91"),
+    PhoneCountry(id: "MV", name: "Maldives", flag: "🇲🇻", dialCode: "+960"),
+    PhoneCountry(id: "NP", name: "Nepal", flag: "🇳🇵", dialCode: "+977"),
+    PhoneCountry(id: "PK", name: "Pakistan", flag: "🇵🇰", dialCode: "+92"),
+    PhoneCountry(id: "LK", name: "Sri Lanka", flag: "🇱🇰", dialCode: "+94")
+]
+
+private let otherPhoneCountries = [
+    PhoneCountry(id: "AU", name: "Australia", flag: "🇦🇺", dialCode: "+61"),
+    PhoneCountry(id: "TR", name: "Türkiye", flag: "🇹🇷", dialCode: "+90"),
+    PhoneCountry(id: "TM", name: "Turkmenistan", flag: "🇹🇲", dialCode: "+993")
+]
+
+private let phoneCountries = northAmericanPhoneCountries
+    + europeanPhoneCountries
+    + southAsianPhoneCountries
+    + otherPhoneCountries
+
 struct ProfileView: View {
     @EnvironmentObject private var session: AppSession
     @State private var isShowingLogoutConfirmation = false
@@ -162,7 +219,7 @@ struct EditProfileInformationView: View {
     @State private var firstName = ""
     @State private var lastName = ""
     @State private var email = ""
-    @State private var countryCode = "+1"
+    @State private var selectedCountryID = "CA"
     @State private var phone = ""
     @State private var pendingPhotoData: Data?
     @State private var imagePickerSource: UIImagePickerController.SourceType = .photoLibrary
@@ -170,7 +227,9 @@ struct EditProfileInformationView: View {
     @State private var isShowingImagePicker = false
     @State private var validationMessage: String?
 
-    private let countryCodes = ["+1", "+44", "+61", "+90", "+91", "+993"]
+    private var selectedCountry: PhoneCountry {
+        phoneCountries.first { $0.id == selectedCountryID } ?? phoneCountries[0]
+    }
 
     private var displayedPhotoData: Data? {
         pendingPhotoData ?? session.profileImageData
@@ -229,19 +288,50 @@ struct EditProfileInformationView: View {
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
                     HStack(spacing: 12) {
-                        Picker("Country code", selection: $countryCode) {
-                            ForEach(countryCodes, id: \.self) { code in
-                                Text(code).tag(code)
+                        Menu {
+                            Section("North America") {
+                                ForEach(northAmericanPhoneCountries) { country in
+                                    countryButton(country)
+                                }
                             }
+                            Section("Europe") {
+                                ForEach(europeanPhoneCountries) { country in
+                                    countryButton(country)
+                                }
+                            }
+                            Section("Southern Asia") {
+                                ForEach(southAsianPhoneCountries) { country in
+                                    countryButton(country)
+                                }
+                            }
+                            Section("Other") {
+                                ForEach(otherPhoneCountries) { country in
+                                    countryButton(country)
+                                }
+                            }
+                        } label: {
+                            HStack(spacing: 6) {
+                                Text(selectedCountry.flag)
+                                Text(selectedCountry.dialCode)
+                                    .font(.body.weight(.medium))
+                                    .foregroundStyle(Color.tmInk)
+                                Image(systemName: "chevron.down")
+                                    .font(.caption2.weight(.bold))
+                                    .foregroundStyle(Color.tmSlate)
+                            }
+                            .frame(minWidth: 86, alignment: .leading)
+                            .contentShape(Rectangle())
                         }
-                        .pickerStyle(.menu)
-                        .frame(minWidth: 76, alignment: .leading)
 
                         Divider()
+                            .frame(height: 28)
 
                         TextField("Phone number", text: $phone)
                             .textContentType(.telephoneNumber)
                             .keyboardType(.phonePad)
+                            .onChange(of: phone) { newValue in
+                                phone = String(newValue.filter { $0.isNumber }.prefix(15))
+                            }
                     }
                 }
 
@@ -317,14 +407,23 @@ struct EditProfileInformationView: View {
         return letters.isEmpty ? "TM" : String(letters).uppercased()
     }
 
+    private func countryButton(_ country: PhoneCountry) -> some View {
+        Button {
+            selectedCountryID = country.id
+        } label: {
+            Text("\(country.flag) \(country.name)  \(country.dialCode)")
+        }
+    }
+
     private func loadProfile() {
         guard let profile = session.userProfile else { return }
         firstName = profile.firstName
         lastName = profile.lastName
         email = profile.email
         let phoneParts = profile.phone.split(separator: " ", maxSplits: 1).map(String.init)
-        if let savedCode = phoneParts.first, countryCodes.contains(savedCode) {
-            countryCode = savedCode
+        if let savedCode = phoneParts.first,
+           let savedCountry = phoneCountries.first(where: { $0.dialCode == savedCode }) {
+            selectedCountryID = savedCountry.id
             phone = phoneParts.count > 1 ? phoneParts[1] : ""
         } else {
             phone = profile.phone
@@ -337,7 +436,7 @@ struct EditProfileInformationView: View {
         let cleanLastName = lastName.trimmingCharacters(in: .whitespacesAndNewlines)
         let cleanEmail = email.trimmingCharacters(in: .whitespacesAndNewlines)
         let cleanPhone = phone.trimmingCharacters(in: .whitespacesAndNewlines)
-        let formattedPhone = cleanPhone.isEmpty ? "" : "\(countryCode) \(cleanPhone)"
+        let formattedPhone = cleanPhone.isEmpty ? "" : "\(selectedCountry.dialCode) \(cleanPhone)"
 
         guard !cleanFirstName.isEmpty, !cleanLastName.isEmpty else {
             validationMessage = "First and last name are required."
