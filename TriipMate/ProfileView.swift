@@ -4,15 +4,34 @@ struct ProfileView: View {
     @EnvironmentObject private var session: AppSession
     @State private var isShowingLogoutConfirmation = false
 
+    private var displayName: String {
+        guard let profile = session.userProfile else {
+            return session.authUser?.email ?? "TriipMate User"
+        }
+
+        let name = "\(profile.firstName) \(profile.lastName)"
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return name.isEmpty ? profile.email : name
+    }
+
+    private var displayInitials: String {
+        guard let profile = session.userProfile else {
+            return initials(from: session.authUser?.email ?? "TU")
+        }
+
+        let fullName = "\(profile.firstName) \(profile.lastName)"
+        return initials(from: fullName.isEmpty ? profile.email : fullName)
+    }
+
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 20) {
                     VStack(spacing: 10) {
-                        Avatar(initials: "AA")
+                        Avatar(initials: displayInitials)
                             .scaleEffect(1.25)
                             .padding(.bottom, 8)
-                        Text("Aymammet")
+                        Text(displayName)
                             .font(.title2.bold())
                             .foregroundStyle(Color.tmInk)
                         Label(
@@ -81,6 +100,14 @@ struct ProfileView: View {
                 Text("Are you sure you want to log out of TriipMate?")
             }
         }
+    }
+
+    private func initials(from text: String) -> String {
+        let words = text
+            .split { !$0.isLetter && !$0.isNumber }
+            .prefix(2)
+        let value = words.compactMap(\.first).map(String.init).joined()
+        return value.isEmpty ? "TM" : value.uppercased()
     }
 }
 
