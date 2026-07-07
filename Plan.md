@@ -75,12 +75,12 @@ This plan reflects the active Xcode target as of July 2026. The project now uses
 
 **Done when:** publishing creates a real ride that survives an emulator restart.
 
-## 8. Build Driver Ride Management `[ ]`
+## 8. Build Driver Ride Management `[x]`
 
-- Load rides owned by the authenticated driver.
-- Support viewing, editing, cancelling, and deleting eligible rides.
-- Separate draft, active, full, completed, and cancelled rides.
-- Preserve historical ride details after completion.
+- Loaded rides owned by the authenticated driver from Firestore.
+- Supported viewing, editing, cancelling, and deleting eligible rides.
+- Separated draft, active, full, completed, and cancelled rides with status filters.
+- Preserved ride details in Firestore for completed and cancelled rides unless the driver explicitly deletes a ride.
 
 **Done when:** drivers can manage the full lifecycle of their Firestore-backed rides.
 
@@ -158,4 +158,4 @@ This plan reflects the active Xcode target as of July 2026. The project now uses
 
 ## Recommended Next Work
 
-Complete stages **8** and **9** next. Ride publishing is now the first Firestore-backed marketplace workflow; drivers should be able to manage their published rides, and passengers should be able to search real Firestore rides.
+Complete stage **9** next. Drivers can now manage Firestore-backed rides; passengers should be able to search real Firestore rides published by drivers.

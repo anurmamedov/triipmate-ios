@@ -344,42 +344,35 @@ struct PassengerTripsView: View {
 
 struct PostedTripsView: View {
     @EnvironmentObject private var session: AppSession
+    @State private var selectedStatus: RideStatus?
+    @State private var rideToEdit: MarketplaceRide?
+    @State private var pendingAction: DriverRideAction?
 
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
-                    Text("Manage active routes, open seats, and passenger requests.")
-                        .font(.subheadline)
-                        .foregroundStyle(Color.tmSlate)
+                    header
+                    statusFilter
 
-                    ForEach(SampleData.rides.prefix(2)) { ride in
-                        VStack(alignment: .leading, spacing: 12) {
-                            HStack {
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text("\(ride.from) → \(ride.to)")
-                                        .font(.headline)
-                                        .foregroundStyle(Color.tmInk)
-                                    Text("\(ride.date), \(ride.time)")
-                                        .font(.caption)
-                                        .foregroundStyle(Color.tmSlate)
-                                }
-                                Spacer()
-                                Text("\(ride.seats) seats left")
-                                    .font(.caption.weight(.semibold))
-                                    .foregroundStyle(Color.tmGreen)
+                    if session.isDriverRidesLoading {
+                        loadingState
+                    } else if filteredRides.isEmpty {
+                        emptyState
+                    } else {
+                        ForEach(filteredRides) { ride in
+                            NavigationLink {
+                                DriverRideDetailView(
+                                    ride: ride,
+                                    onEdit: { rideToEdit = ride },
+                                    onCancel: { pendingAction = .cancel(ride) },
+                                    onDelete: { pendingAction = .delete(ride) }
+                                )
+                            } label: {
+                                DriverRideCard(ride: ride)
                             }
-                            HStack {
-                                Label("$\(ride.price) / seat", systemImage: "dollarsign.circle.fill")
-                                Spacer()
-                                Label(ride.vehicle, systemImage: "car.fill")
-                            }
-                            .font(.caption)
-                            .foregroundStyle(Color.tmSlate)
+                            .buttonStyle(.plain)
                         }
-                        .padding(16)
-                        .background(.white)
-                        .clipShape(RoundedRectangle(cornerRadius: 8))
                     }
                 }
                 .padding(20)
@@ -388,7 +381,495 @@ struct PostedTripsView: View {
             .safeAreaInset(edge: .top, spacing: 0) {
                 RoleSwitchHeader(activeRole: $session.activeRole)
             }
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        Task { await session.loadDriverRides() }
+                    } label: {
+                        Image(systemName: "arrow.clockwise")
+                    }
+                    .disabled(session.isDriverRidesLoading)
+                }
+            }
+            .task {
+                await session.loadDriverRides()
+            }
+            .sheet(item: $rideToEdit) { ride in
+                DriverRideEditView(ride: ride) { updatedRide in
+                    await session.updateDriverRide(updatedRide)
+                }
+            }
+            .alert(item: $pendingAction) { action in
+                switch action {
+                case .cancel(let ride):
+                    return Alert(
+                        title: Text("Cancel ride?"),
+                        message: Text("Passengers will no longer be able to request this ride."),
+                        primaryButton: .destructive(Text("Cancel ride")) {
+                            Task { await session.cancelDriverRide(ride) }
+                        },
+                        secondaryButton: .cancel()
+                    )
+                case .delete(let ride):
+                    return Alert(
+                        title: Text("Delete ride?"),
+                        message: Text("This removes the ride from Firestore. Completed or cancelled history should normally be kept."),
+                        primaryButton: .destructive(Text("Delete")) {
+                            Task { await session.deleteDriverRide(ride) }
+                        },
+                        secondaryButton: .cancel()
+                    )
+                }
+            }
         }
+    }
+
+    private var filteredRides: [MarketplaceRide] {
+        guard let selectedStatus else { return session.driverRides }
+        return session.driverRides.filter { $0.status == selectedStatus }
+    }
+
+    private var header: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("My posted rides")
+                .font(.system(size: 30, weight: .bold))
+                .foregroundStyle(Color.tmInk)
+            Text("View, edit, cancel, or delete the rides you published.")
+                .font(.subheadline)
+                .foregroundStyle(Color.tmSlate)
+        }
+    }
+
+    private var statusFilter: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                DriverRideStatusChip(
+                    title: "All",
+                    count: session.driverRides.count,
+                    isSelected: selectedStatus == nil
+                ) {
+                    selectedStatus = nil
+                }
+
+                ForEach(RideStatus.allCases) { status in
+                    DriverRideStatusChip(
+                        title: status.displayTitle,
+                        count: session.driverRides.filter { $0.status == status }.count,
+                        isSelected: selectedStatus == status
+                    ) {
+                        selectedStatus = status
+                    }
+                }
+            }
+        }
+    }
+
+    private var loadingState: some View {
+        VStack(spacing: 12) {
+            ProgressView()
+                .tint(Color.tmGreen)
+            Text("Loading your posted rides...")
+                .font(.subheadline)
+                .foregroundStyle(Color.tmSlate)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 42)
+    }
+
+    private var emptyState: some View {
+        VStack(spacing: 12) {
+            Image(systemName: "car.2")
+                .font(.system(size: 34, weight: .semibold))
+                .foregroundStyle(Color.tmGreen)
+            Text(selectedStatus == nil ? "No posted rides yet" : "No \(selectedStatus?.displayTitle.lowercased() ?? "") rides")
+                .font(.headline)
+                .foregroundStyle(Color.tmInk)
+            Text("Published rides from the Post Ride tab will appear here.")
+                .font(.subheadline)
+                .foregroundStyle(Color.tmSlate)
+                .multilineTextAlignment(.center)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(24)
+        .background(.white)
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+}
+
+private struct DriverRideStatusChip: View {
+    let title: String
+    let count: Int
+    let isSelected: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 6) {
+                Text(title)
+                Text("\(count)")
+                    .font(.caption2.bold())
+                    .foregroundStyle(isSelected ? Color.tmGreen : Color.tmSlate)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 3)
+                    .background(isSelected ? .white : Color.tmMist)
+                    .clipShape(RoundedRectangle(cornerRadius: 6))
+            }
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(isSelected ? .white : Color.tmSlate)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 9)
+            .background(isSelected ? Color.tmGreen : .white)
+            .clipShape(RoundedRectangle(cornerRadius: 8))
+            .overlay {
+                RoundedRectangle(cornerRadius: 8)
+                    .stroke(isSelected ? Color.tmGreen : Color.tmLine, lineWidth: 1)
+            }
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+private struct DriverRideCard: View {
+    let ride: MarketplaceRide
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(alignment: .top, spacing: 12) {
+                VStack(alignment: .leading, spacing: 5) {
+                    Text("\(ride.from.displayName) to \(ride.to.displayName)")
+                        .font(.headline)
+                        .foregroundStyle(Color.tmInk)
+                    Text(ride.departureSummary)
+                        .font(.caption)
+                        .foregroundStyle(Color.tmSlate)
+                }
+                Spacer()
+                Text(ride.status.displayTitle)
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(ride.status.tint)
+                    .padding(.horizontal, 9)
+                    .padding(.vertical, 6)
+                    .background(ride.status.tint.opacity(0.12))
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+            }
+
+            HStack(spacing: 12) {
+                DriverRideMetric(icon: "person.2.fill", value: "\(ride.availableSeats)/\(ride.totalSeats)", label: "Seats")
+                DriverRideMetric(icon: "dollarsign.circle.fill", value: ride.priceSummary, label: "Per seat")
+                DriverRideMetric(icon: "car.fill", value: ride.vehicle.shortName, label: "Vehicle")
+            }
+        }
+        .padding(16)
+        .background(.white)
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .overlay {
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(Color.tmLine, lineWidth: 1)
+        }
+    }
+}
+
+private struct DriverRideMetric: View {
+    let icon: String
+    let value: String
+    let label: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Label(value, systemImage: icon)
+                .font(.caption.weight(.bold))
+                .foregroundStyle(Color.tmInk)
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
+            Text(label)
+                .font(.caption2)
+                .foregroundStyle(Color.tmSlate)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+private struct DriverRideDetailView: View {
+    let ride: MarketplaceRide
+    let onEdit: () -> Void
+    let onCancel: () -> Void
+    let onDelete: () -> Void
+
+    var body: some View {
+        ScrollView {
+            VStack(spacing: 16) {
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack {
+                        Text("\(ride.from.displayName) to \(ride.to.displayName)")
+                            .font(.title3.bold())
+                            .foregroundStyle(Color.tmInk)
+                        Spacer()
+                        Text(ride.status.displayTitle)
+                            .font(.caption.bold())
+                            .foregroundStyle(ride.status.tint)
+                    }
+                    Text(ride.departureSummary)
+                        .font(.subheadline)
+                        .foregroundStyle(Color.tmSlate)
+                }
+                .requestDetailSection()
+
+                VStack(alignment: .leading, spacing: 14) {
+                    RequestDetailRow(icon: "location.fill", title: "From", value: ride.from.displayName)
+                    RequestDetailRow(icon: "mappin.and.ellipse", title: "To", value: ride.to.displayName)
+                    RequestDetailRow(icon: "clock.fill", title: "Expected end", value: ride.arrivalSummary)
+                    RequestDetailRow(icon: "timer", title: "Trip time", value: ride.durationSummary)
+                    RequestDetailRow(icon: "person.2.fill", title: "Seats", value: "\(ride.availableSeats) open of \(ride.totalSeats)")
+                    RequestDetailRow(icon: "dollarsign.circle.fill", title: "Seat price", value: ride.priceSummary)
+                }
+                .requestDetailSection()
+
+                VStack(alignment: .leading, spacing: 14) {
+                    RequestDetailRow(icon: "car.fill", title: "Car", value: ride.vehicle.displayName)
+                    RequestDetailRow(icon: "fuelpump.fill", title: "Power", value: ride.vehicle.powerType)
+                    RequestDetailRow(icon: "rectangle.3.group.fill", title: "Body", value: ride.vehicle.bodyType)
+                }
+                .requestDetailSection()
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Label("Driver note", systemImage: "text.bubble.fill")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(Color.tmGreen)
+                    Text(ride.notes.isEmpty ? "No note added." : ride.notes)
+                        .font(.body)
+                        .foregroundStyle(Color.tmInk)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .requestDetailSection()
+            }
+            .padding(20)
+        }
+        .background(Color.tmMist.ignoresSafeArea())
+        .navigationTitle("Ride details")
+        .navigationBarTitleDisplayMode(.inline)
+        .safeAreaInset(edge: .bottom) {
+            HStack(spacing: 10) {
+                Button(action: onDelete) {
+                    Image(systemName: "trash.fill")
+                        .frame(width: 44, height: 44)
+                }
+                .buttonStyle(.bordered)
+                .tint(Color.red)
+
+                Button(action: onCancel) {
+                    Label("Cancel", systemImage: "xmark.circle.fill")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
+                .tint(Color.tmSlate)
+                .disabled(ride.status == .cancelled || ride.status == .completed)
+
+                Button(action: onEdit) {
+                    Label("Edit", systemImage: "square.and.pencil")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(Color.tmGreen)
+                .disabled(ride.status == .completed || ride.status == .cancelled)
+            }
+            .padding(.horizontal, 20)
+            .padding(.vertical, 12)
+            .background(.ultraThinMaterial)
+        }
+    }
+}
+
+private struct DriverRideEditView: View {
+    let ride: MarketplaceRide
+    let onSave: (MarketplaceRide) async -> Bool
+    @Environment(\.dismiss) private var dismiss
+    @State private var availableSeats: Int
+    @State private var totalSeats: Int
+    @State private var price: Double
+    @State private var status: RideStatus
+    @State private var notes: String
+    @State private var error: String?
+    @State private var isSaving = false
+
+    init(ride: MarketplaceRide, onSave: @escaping (MarketplaceRide) async -> Bool) {
+        self.ride = ride
+        self.onSave = onSave
+        _availableSeats = State(initialValue: ride.availableSeats)
+        _totalSeats = State(initialValue: ride.totalSeats)
+        _price = State(initialValue: Double(ride.pricePerSeatCents / 100))
+        _status = State(initialValue: ride.status)
+        _notes = State(initialValue: ride.notes)
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Ride") {
+                    Text("\(ride.from.displayName) to \(ride.to.displayName)")
+                    Text(ride.departureSummary)
+                        .foregroundStyle(Color.tmSlate)
+                }
+
+                Section("Seats and price") {
+                    Stepper("Total seats: \(totalSeats)", value: $totalSeats, in: 1...8)
+                        .onChange(of: totalSeats) { value in
+                            availableSeats = min(availableSeats, value)
+                        }
+                    Stepper("Available seats: \(availableSeats)", value: $availableSeats, in: 0...totalSeats)
+                    Stepper("$\(Int(price)) per seat", value: $price, in: 25...1500, step: 1)
+                }
+
+                Section("Status") {
+                    Picker("Status", selection: $status) {
+                        ForEach(RideStatus.allCases) { status in
+                            Text(status.displayTitle).tag(status)
+                        }
+                    }
+                }
+
+                Section("Note") {
+                    TextField("Driver note", text: $notes, axis: .vertical)
+                        .lineLimit(4, reservesSpace: true)
+                }
+
+                if let error {
+                    Section {
+                        Text(error)
+                            .foregroundStyle(Color.red)
+                    }
+                }
+            }
+            .navigationTitle("Edit ride")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button(isSaving ? "Saving" : "Save") {
+                        Task { await save() }
+                    }
+                    .disabled(isSaving)
+                }
+            }
+        }
+    }
+
+    private func save() async {
+        guard availableSeats <= totalSeats else {
+            error = "Available seats cannot be more than total seats."
+            return
+        }
+
+        isSaving = true
+        error = nil
+        let updatedRide = ride.updated(
+            status: status,
+            availableSeats: availableSeats,
+            totalSeats: totalSeats,
+            pricePerSeatCents: Int(price.rounded()) * 100,
+            notes: notes.trimmingCharacters(in: .whitespacesAndNewlines)
+        )
+
+        if await onSave(updatedRide) {
+            dismiss()
+        } else {
+            error = "The ride could not be saved."
+        }
+        isSaving = false
+    }
+}
+
+private enum DriverRideAction: Identifiable {
+    case cancel(MarketplaceRide)
+    case delete(MarketplaceRide)
+
+    var id: String {
+        switch self {
+        case .cancel(let ride):
+            return "cancel-\(ride.id)"
+        case .delete(let ride):
+            return "delete-\(ride.id)"
+        }
+    }
+}
+
+private extension MarketplaceRide {
+    var departureSummary: String {
+        Self.shortDateFormatter.string(from: departureAt.date)
+    }
+
+    var arrivalSummary: String {
+        guard let expectedArrivalAt else {
+            return "Not set"
+        }
+        return Self.shortDateFormatter.string(from: expectedArrivalAt.date)
+    }
+
+    var durationSummary: String {
+        let hours = estimatedDurationMinutes / 60
+        let minutes = estimatedDurationMinutes % 60
+        if hours == 0 {
+            return "\(minutes)m"
+        }
+        if minutes == 0 {
+            return "\(hours)h"
+        }
+        return "\(hours)h \(minutes)m"
+    }
+
+    var priceSummary: String {
+        "$\(pricePerSeatCents / 100)"
+    }
+
+    private static let shortDateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "MMM d, h:mm a"
+        return formatter
+    }()
+}
+
+private extension RideStatus {
+    var displayTitle: String {
+        switch self {
+        case .draft:
+            return "Draft"
+        case .published:
+            return "Published"
+        case .active:
+            return "Active"
+        case .full:
+            return "Full"
+        case .completed:
+            return "Completed"
+        case .cancelled:
+            return "Cancelled"
+        }
+    }
+
+    var tint: Color {
+        switch self {
+        case .draft:
+            return Color.tmSlate
+        case .published, .active:
+            return Color.tmGreen
+        case .full:
+            return Color.tmAmber
+        case .completed:
+            return Color.tmInk
+        case .cancelled:
+            return Color.red
+        }
+    }
+}
+
+private extension VehicleSnapshot {
+    var displayName: String {
+        "\(year) \(make) \(model)".trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    var shortName: String {
+        "\(make) \(model)".trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }
 

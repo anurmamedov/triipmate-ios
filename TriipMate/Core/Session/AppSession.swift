@@ -9,6 +9,7 @@ final class AppSession: ObservableObject {
     @Published var userProfile: UserProfile?
     @Published var profileImageData: Data?
     @Published var savedVehicles: [SavedVehicle] = []
+    @Published var driverRides: [MarketplaceRide] = []
     @Published var authError: String?
     @Published var authNotice: String?
     @Published var isAuthWorking = false
@@ -16,6 +17,8 @@ final class AppSession: ObservableObject {
     @Published var isProfilePhotoWorking = false
     @Published var isVehicleWorking = false
     @Published var isRidePublishing = false
+    @Published var isDriverRidesLoading = false
+    @Published var isDriverRideUpdating = false
 
     private let authService = LocalFirebaseAuthService()
     private let sessionStore = AuthSessionStore()
@@ -82,6 +85,7 @@ final class AppSession: ObservableObject {
         userProfile = nil
         profileImageData = nil
         savedVehicles = []
+        driverRides = []
         isAuthenticated = false
         authError = nil
         authNotice = nil
@@ -231,6 +235,80 @@ final class AppSession: ObservableObject {
             }
 
             try await rideService.save(ride, idToken: authUser.idToken)
+            driverRides.append(ride)
+            driverRides.sort { $0.departureAt.date < $1.departureAt.date }
+            return true
+        } catch {
+            authError = error.localizedDescription
+            return false
+        }
+    }
+
+    func loadDriverRides() async {
+        guard let authUser else {
+            authError = "Please log in before loading your rides."
+            return
+        }
+
+        isDriverRidesLoading = true
+        authError = nil
+        defer { isDriverRidesLoading = false }
+
+        do {
+            driverRides = try await rideService.fetchDriverRides(uid: authUser.uid, idToken: authUser.idToken)
+        } catch {
+            authError = error.localizedDescription
+        }
+    }
+
+    func updateDriverRide(_ ride: MarketplaceRide) async -> Bool {
+        guard let authUser else {
+            authError = "Please log in before updating your ride."
+            return false
+        }
+
+        guard ride.driverUid == authUser.uid else {
+            authError = "You can only update rides that you published."
+            return false
+        }
+
+        isDriverRideUpdating = true
+        authError = nil
+        defer { isDriverRideUpdating = false }
+
+        do {
+            try await rideService.save(ride, idToken: authUser.idToken)
+            replaceDriverRide(ride)
+            return true
+        } catch {
+            authError = error.localizedDescription
+            return false
+        }
+    }
+
+    func cancelDriverRide(_ ride: MarketplaceRide) async -> Bool {
+        let cancelledRide = ride.updated(status: .cancelled)
+        return await updateDriverRide(cancelledRide)
+    }
+
+    func deleteDriverRide(_ ride: MarketplaceRide) async -> Bool {
+        guard let authUser else {
+            authError = "Please log in before deleting your ride."
+            return false
+        }
+
+        guard ride.driverUid == authUser.uid else {
+            authError = "You can only delete rides that you published."
+            return false
+        }
+
+        isDriverRideUpdating = true
+        authError = nil
+        defer { isDriverRideUpdating = false }
+
+        do {
+            try await rideService.deleteRide(id: ride.id, idToken: authUser.idToken)
+            driverRides.removeAll { $0.id == ride.id }
             return true
         } catch {
             authError = error.localizedDescription
@@ -295,6 +373,46 @@ final class AppSession: ObservableObject {
             profileImageData = try? await storageService.download(path: path, idToken: authUser.idToken)
         }
         savedVehicles = (try? await vehicleService.fetchAll(uid: authUser.uid, idToken: authUser.idToken)) ?? []
+        driverRides = (try? await rideService.fetchDriverRides(uid: authUser.uid, idToken: authUser.idToken)) ?? []
         isAuthenticated = true
+    }
+
+    private func replaceDriverRide(_ ride: MarketplaceRide) {
+        if let index = driverRides.firstIndex(where: { $0.id == ride.id }) {
+            driverRides[index] = ride
+        } else {
+            driverRides.append(ride)
+        }
+        driverRides.sort { $0.departureAt.date < $1.departureAt.date }
+    }
+}
+
+extension MarketplaceRide {
+    func updated(
+        status: RideStatus? = nil,
+        availableSeats: Int? = nil,
+        totalSeats: Int? = nil,
+        pricePerSeatCents: Int? = nil,
+        notes: String? = nil
+    ) -> MarketplaceRide {
+        MarketplaceRide(
+            id: id,
+            driverUid: driverUid,
+            driverDisplayName: driverDisplayName,
+            driverProfilePhotoPath: driverProfilePhotoPath,
+            from: from,
+            to: to,
+            departureAt: departureAt,
+            expectedArrivalAt: expectedArrivalAt,
+            estimatedDurationMinutes: estimatedDurationMinutes,
+            availableSeats: availableSeats ?? self.availableSeats,
+            totalSeats: totalSeats ?? self.totalSeats,
+            pricePerSeatCents: pricePerSeatCents ?? self.pricePerSeatCents,
+            vehicle: vehicle,
+            status: status ?? self.status,
+            notes: notes ?? self.notes,
+            createdAt: createdAt,
+            updatedAt: FirestoreTimestamp(date: Date())
+        )
     }
 }

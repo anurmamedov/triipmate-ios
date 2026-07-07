@@ -177,6 +177,42 @@ struct LocalFirestoreRideService {
             throw LocalAuthError.invalidResponse
         }
     }
+
+    func fetchDriverRides(uid: String, idToken: String) async throws -> [MarketplaceRide] {
+        var request = URLRequest(url: ridesURL)
+        request.setValue("Bearer \(idToken)", forHTTPHeaderField: "Authorization")
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw LocalAuthError.invalidResponse
+        }
+
+        if httpResponse.statusCode == 404 {
+            return []
+        }
+
+        guard (200..<300).contains(httpResponse.statusCode) else {
+            throw LocalAuthError.invalidResponse
+        }
+
+        let collection = try JSONDecoder().decode(FirestoreRideCollection.self, from: data)
+        return (collection.documents ?? [])
+            .compactMap { $0.marketplaceRide }
+            .filter { $0.driverUid == uid }
+            .sorted { $0.departureAt.date < $1.departureAt.date }
+    }
+
+    func deleteRide(id: String, idToken: String) async throws {
+        var request = URLRequest(url: ridesURL.appendingPathComponent(id))
+        request.httpMethod = "DELETE"
+        request.setValue("Bearer \(idToken)", forHTTPHeaderField: "Authorization")
+
+        let (_, response) = try await URLSession.shared.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse,
+              (200..<300).contains(httpResponse.statusCode) else {
+            throw LocalAuthError.invalidResponse
+        }
+    }
 }
 
 private struct FirestoreVehicleDocument: Codable {
@@ -303,6 +339,130 @@ private enum FirestoreRideValue: Encodable {
 
 private struct FirestoreMapValue: Encodable {
     let fields: [String: FirestoreRideValue]
+}
+
+private struct FirestoreRideCollection: Decodable {
+    let documents: [FirestoreDecodedRideDocument]?
+}
+
+private struct FirestoreDecodedRideDocument: Decodable {
+    let name: String?
+    let fields: [String: FirestoreDecodedValue]
+
+    var marketplaceRide: MarketplaceRide? {
+        let id = name?.split(separator: "/").last.map(String.init) ?? UUID().uuidString
+        guard let driverUid = fields["driverUid"]?.stringValue,
+              let driverDisplayName = fields["driverDisplayName"]?.stringValue,
+              let from = fields["from"]?.routeEndpoint,
+              let to = fields["to"]?.routeEndpoint,
+              let departureAt = fields["departureAt"]?.timestamp,
+              let estimatedDurationMinutes = fields["estimatedDurationMinutes"]?.intValue,
+              let availableSeats = fields["availableSeats"]?.intValue,
+              let totalSeats = fields["totalSeats"]?.intValue,
+              let pricePerSeatCents = fields["pricePerSeatCents"]?.intValue,
+              let vehicle = fields["vehicle"]?.vehicleSnapshot,
+              let statusRawValue = fields["status"]?.stringValue,
+              let status = RideStatus(rawValue: statusRawValue),
+              let notes = fields["notes"]?.stringValue,
+              let createdAt = fields["createdAt"]?.timestamp,
+              let updatedAt = fields["updatedAt"]?.timestamp else {
+            return nil
+        }
+
+        return MarketplaceRide(
+            id: id,
+            driverUid: driverUid,
+            driverDisplayName: driverDisplayName,
+            driverProfilePhotoPath: fields["driverProfilePhotoPath"]?.stringValue,
+            from: from,
+            to: to,
+            departureAt: departureAt,
+            expectedArrivalAt: fields["expectedArrivalAt"]?.timestamp,
+            estimatedDurationMinutes: estimatedDurationMinutes,
+            availableSeats: availableSeats,
+            totalSeats: totalSeats,
+            pricePerSeatCents: pricePerSeatCents,
+            vehicle: vehicle,
+            status: status,
+            notes: notes,
+            createdAt: createdAt,
+            updatedAt: updatedAt
+        )
+    }
+}
+
+private struct FirestoreDecodedValue: Decodable {
+    let stringValue: String?
+    let integerValue: String?
+    let timestampValue: String?
+    let mapValue: FirestoreDecodedMapValue?
+
+    var intValue: Int? {
+        integerValue.flatMap(Int.init)
+    }
+
+    var timestamp: FirestoreTimestamp? {
+        guard let timestampValue,
+              let date = Self.date(from: timestampValue) else {
+            return nil
+        }
+        return FirestoreTimestamp(date: date)
+    }
+
+    var routeEndpoint: RouteEndpoint? {
+        guard let fields = mapValue?.fields,
+              let city = fields["city"]?.stringValue,
+              let state = fields["state"]?.stringValue,
+              let displayName = fields["displayName"]?.stringValue,
+              let normalizedName = fields["normalizedName"]?.stringValue else {
+            return nil
+        }
+        return RouteEndpoint(
+            city: city,
+            state: state,
+            displayName: displayName,
+            normalizedName: normalizedName
+        )
+    }
+
+    var vehicleSnapshot: VehicleSnapshot? {
+        guard let fields = mapValue?.fields,
+              let make = fields["make"]?.stringValue,
+              let model = fields["model"]?.stringValue,
+              let year = fields["year"]?.stringValue,
+              let powerType = fields["powerType"]?.stringValue,
+              let bodyType = fields["bodyType"]?.stringValue else {
+            return nil
+        }
+        return VehicleSnapshot(
+            vehicleId: fields["vehicleId"]?.stringValue,
+            make: make,
+            model: model,
+            year: year,
+            powerType: powerType,
+            bodyType: bodyType
+        )
+    }
+
+    private static func date(from timestamp: String) -> Date? {
+        fractionalTimestampFormatter.date(from: timestamp) ?? wholeSecondTimestampFormatter.date(from: timestamp)
+    }
+
+    private static let fractionalTimestampFormatter: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return formatter
+    }()
+
+    private static let wholeSecondTimestampFormatter: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime]
+        return formatter
+    }()
+}
+
+private struct FirestoreDecodedMapValue: Decodable {
+    let fields: [String: FirestoreDecodedValue]?
 }
 
 private extension RouteEndpoint {
