@@ -42,6 +42,7 @@ TriipMate/
 │   ├── DesignSystem/Theme.swift
 │   ├── Models/
 │   │   ├── AuthModels.swift
+│   │   ├── MarketplaceModels.swift
 │   │   └── RideModels.swift
 │   ├── Services/LocalFirebaseServices.swift
 │   └── Session/AppSession.swift
@@ -129,6 +130,7 @@ The project does not currently contain an automated test target. Adding unit and
 - `firestore.rules` controls local Firestore access.
 - `storage.rules` controls local Storage access.
 - `firebase-dataok/` contains the current local emulator export.
+- `Docs/FirestoreDataModel.md` defines the Firestore collections, ownership rules, statuses, and marketplace model relationships.
 - `GoogleService-Info.plist` is ignored and must not be committed.
 
 Current emulator rules are development-oriented and must be tightened before staging or production use.

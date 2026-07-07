@@ -55,12 +55,12 @@ This plan reflects the active Xcode target as of July 2026. The project now uses
 
 **Done when:** drivers can add, edit, delete, and select vehicles reliably from Profile and Post Ride.
 
-## 6. Define Firestore Data Models `[ ]`
+## 6. Define Firestore Data Models `[x]`
 
-- Finalize schemas for rides, requests, trips, conversations, and messages.
-- Use stable document IDs and Firestore timestamps.
-- Define ownership fields and allowed status values.
-- Document relationships between users, vehicles, rides, and requests.
+- Finalized schemas for rides, requests, trips, conversations, and messages.
+- Added stable document IDs and Firestore timestamp model conventions.
+- Defined ownership fields and allowed status values.
+- Documented relationships between users, vehicles, rides, and requests in `Docs/FirestoreDataModel.md`.
 
 **Done when:** every marketplace entity has one documented schema that can round-trip through the Firestore emulator.
 
@@ -158,4 +158,4 @@ This plan reflects the active Xcode target as of July 2026. The project now uses
 
 ## Recommended Next Work
 
-Complete stages **1, 2, 6, and 7** next. This creates a clean foundation and makes Post Ride the first complete Firestore-backed marketplace workflow before requests and messaging add more cross-feature complexity.
+Complete stage **7** next. The project now has a clean foundation, local emulator workflow, and documented Firestore marketplace schema. Post Ride should become the first complete Firestore-backed marketplace workflow before requests and messaging add more cross-feature complexity.
