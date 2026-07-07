@@ -67,7 +67,10 @@ struct LoginView: View {
     var body: some View {
         AuthFormLayout(title: "Welcome back", subtitle: "Log in to continue planning shared trips.") {
             AuthTextField(title: "Email", text: $email, icon: "at")
+                .keyboardType(.emailAddress)
+                .textContentType(.emailAddress)
             AuthSecureField(title: "Password", text: $password, icon: "lock.fill")
+                .textContentType(.password)
 
             NavigationLink("Forgot password?") {
                 ForgotPasswordView()
@@ -93,6 +96,7 @@ struct LoginView: View {
             AuthErrorMessage(message: session.authError)
         }
         .navigationTitle("Log In")
+        .onAppear { session.clearAuthFeedback() }
     }
 }
 
@@ -110,9 +114,15 @@ struct RegisterView: View {
             AuthTextField(title: "First name", text: $firstName, icon: "person.fill")
             AuthTextField(title: "Last name", text: $lastName, icon: "person.fill")
             AuthTextField(title: "Email", text: $email, icon: "envelope.fill")
+                .keyboardType(.emailAddress)
+                .textContentType(.emailAddress)
             AuthTextField(title: "Phone number", text: $phone, icon: "phone.fill")
+                .keyboardType(.phonePad)
+                .textContentType(.telephoneNumber)
             AuthSecureField(title: "Password", text: $password, icon: "lock.fill")
+                .textContentType(.newPassword)
             AuthSecureField(title: "Confirm password", text: $confirmPassword, icon: "lock.shield.fill")
+                .textContentType(.newPassword)
 
             Button {
                 Task {
@@ -134,11 +144,15 @@ struct RegisterView: View {
                 }
                 .authPrimaryButton()
             }
-            .disabled(email.isEmpty || password.isEmpty || confirmPassword.isEmpty || session.isAuthWorking)
+            .disabled(
+                firstName.isEmpty || lastName.isEmpty || email.isEmpty || phone.isEmpty ||
+                password.isEmpty || confirmPassword.isEmpty || session.isAuthWorking
+            )
 
             AuthErrorMessage(message: session.authError)
         }
         .navigationTitle("Register")
+        .onAppear { session.clearAuthFeedback() }
     }
 }
 
@@ -158,155 +172,50 @@ struct AuthErrorMessage: View {
     }
 }
 
+struct AuthNoticeMessage: View {
+    let message: String?
+
+    var body: some View {
+        if let message {
+            Label(message, systemImage: "checkmark.circle.fill")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(Color.tmGreen)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(12)
+                .background(Color.tmGreen.opacity(0.08))
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+        }
+    }
+}
+
 struct ForgotPasswordView: View {
+    @EnvironmentObject private var session: AppSession
     @State private var email = ""
 
     var body: some View {
-        AuthFormLayout(title: "Reset password", subtitle: "Enter your email and we will send a reset code.") {
+        AuthFormLayout(title: "Reset password", subtitle: "Create a local Firebase password-reset link for your account.") {
             AuthTextField(title: "Email", text: $email, icon: "envelope.fill")
+                .keyboardType(.emailAddress)
+                .textContentType(.emailAddress)
 
-            NavigationLink {
-                VerificationView(nextStep: .login)
+            Button {
+                Task { await session.sendPasswordReset(email: email) }
             } label: {
-                Label("Send Code", systemImage: "paperplane.fill")
-                    .authPrimaryButton()
+                HStack {
+                    if session.isAuthWorking {
+                        ProgressView()
+                    }
+                    Label("Create Reset Link", systemImage: "paperplane.fill")
+                }
+                .authPrimaryButton()
             }
+            .disabled(email.isEmpty || session.isAuthWorking)
+
+            AuthNoticeMessage(message: session.authNotice)
+            AuthErrorMessage(message: session.authError)
         }
         .navigationTitle("Forgot Password")
-    }
-}
-
-enum VerificationNextStep {
-    case profile
-    case login
-}
-
-struct VerificationView: View {
-    let nextStep: VerificationNextStep
-    @EnvironmentObject private var session: AppSession
-    @State private var code = ""
-
-    var body: some View {
-        AuthFormLayout(title: "Enter verification code", subtitle: "Use the code sent to your phone.") {
-            AuthTextField(title: "6-digit code", text: $code, icon: "number")
-                .keyboardType(.numberPad)
-
-            if nextStep == .profile {
-                NavigationLink {
-                    CreateProfileView()
-                } label: {
-                    Label("Verify and Continue", systemImage: "checkmark.seal.fill")
-                        .authPrimaryButton()
-                }
-            } else {
-                Button {
-                    session.isAuthenticated = true
-                } label: {
-                    Label("Verify and Log In", systemImage: "checkmark.seal.fill")
-                        .authPrimaryButton()
-                }
-            }
-        }
-        .navigationTitle("Verification")
-    }
-}
-
-struct CreateProfileView: View {
-    @State private var homeCity = ""
-    @State private var homeState = ""
-    @State private var gender = "Male"
-    @State private var age = ""
-    @State private var bio = ""
-    @State private var ownsCar = false
-    @State private var prefersQuietRide = true
-    @State private var allowsLuggage = true
-
-    var body: some View {
-        AuthFormLayout(title: "Create your profile", subtitle: "Add details that help drivers and passengers feel comfortable.") {
-            VStack(spacing: 10) {
-                Image(systemName: "person.crop.circle.badge.plus")
-                    .font(.system(size: 58))
-                    .foregroundStyle(Color.tmGreen)
-                Text("Add Profile Photo")
-                    .font(.headline)
-                    .foregroundStyle(Color.tmInk)
-            }
-            .frame(maxWidth: .infinity)
-            .padding(20)
-            .background(.white)
-            .clipShape(RoundedRectangle(cornerRadius: 8))
-
-            AuthSectionTitle("Basic profile")
-            AuthTextField(title: "Home city", text: $homeCity, icon: "house.fill")
-            AuthTextField(title: "Home state", text: $homeState, icon: "map.fill")
-            AuthTextField(title: "Age", text: $age, icon: "calendar")
-                .keyboardType(.numberPad)
-            Picker("Gender", selection: $gender) {
-                Text("Male").tag("Male")
-                Text("Female").tag("Female")
-            }
-            .pickerStyle(.segmented)
-            AuthTextField(title: "Short bio", text: $bio, icon: "text.quote")
-
-            AuthSectionTitle("Travel preferences")
-            Toggle("I may offer rides as a driver", isOn: $ownsCar)
-            Toggle("Prefer quiet rides", isOn: $prefersQuietRide)
-            Toggle("Usually have luggage", isOn: $allowsLuggage)
-
-            NavigationLink {
-                TrustSetupView()
-            } label: {
-                Label("Continue", systemImage: "arrow.right.circle.fill")
-                    .authPrimaryButton()
-            }
-        }
-        .navigationTitle("Profile")
-    }
-}
-
-struct TrustSetupView: View {
-    @EnvironmentObject private var session: AppSession
-
-    var body: some View {
-        AuthFormLayout(title: "Safety & Verification", subtitle: "Verification makes shared rides safer and easier to accept.") {
-            TrustRow(icon: "phone.badge.checkmark.fill", title: "Phone verification", value: "Complete")
-            TrustRow(icon: "person.text.rectangle.fill", title: "Government ID", value: "Add later")
-            TrustRow(icon: "car.fill", title: "Driver license", value: "For drivers")
-            TrustRow(icon: "cross.case.fill", title: "Emergency contact", value: "Recommended")
-
-            NavigationLink {
-                ModeSelectionView()
-            } label: {
-                Label("Choose Mode", systemImage: "arrow.right.circle.fill")
-                    .authPrimaryButton()
-            }
-        }
-        .navigationTitle("Safety")
-    }
-}
-
-struct ModeSelectionView: View {
-    @EnvironmentObject private var session: AppSession
-
-    var body: some View {
-        AuthFormLayout(title: "What do you want to do today?", subtitle: "You can switch between passenger and driver mode anytime.") {
-            Button {
-                session.activeRole = .passenger
-                session.isAuthenticated = true
-            } label: {
-                ModeChoiceRow(icon: "person.fill", title: "Find a ride", detail: "Search drivers, request a seat, and message about pickup.")
-            }
-            .buttonStyle(.plain)
-
-            Button {
-                session.activeRole = .driver
-                session.isAuthenticated = true
-            } label: {
-                ModeChoiceRow(icon: "car.fill", title: "Offer a ride", detail: "Post your trip, review requests, and manage open seats.")
-            }
-            .buttonStyle(.plain)
-        }
-        .navigationTitle("Choose Mode")
+        .onAppear { session.clearAuthFeedback() }
     }
 }
 
@@ -366,78 +275,6 @@ struct AuthSecureField: View {
             SecureField(title, text: $text)
         }
         .authFieldStyle()
-    }
-}
-
-struct TrustRow: View {
-    let icon: String
-    let title: String
-    let value: String
-
-    var body: some View {
-        HStack(spacing: 12) {
-            Image(systemName: icon)
-                .foregroundStyle(Color.tmGreen)
-                .frame(width: 28)
-            Text(title)
-                .foregroundStyle(Color.tmInk)
-            Spacer()
-            Text(value)
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(Color.tmSlate)
-        }
-        .padding(16)
-        .background(.white)
-        .clipShape(RoundedRectangle(cornerRadius: 8))
-    }
-}
-
-struct AuthSectionTitle: View {
-    let title: String
-
-    init(_ title: String) {
-        self.title = title
-    }
-
-    var body: some View {
-        Text(title)
-            .font(.headline)
-            .foregroundStyle(Color.tmInk)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.top, 8)
-    }
-}
-
-struct ModeChoiceRow: View {
-    let icon: String
-    let title: String
-    let detail: String
-
-    var body: some View {
-        HStack(spacing: 14) {
-            Image(systemName: icon)
-                .font(.title3)
-                .foregroundStyle(Color.tmGreen)
-                .frame(width: 44, height: 44)
-                .background(Color.tmCloud)
-                .clipShape(RoundedRectangle(cornerRadius: 8))
-            VStack(alignment: .leading, spacing: 4) {
-                Text(title)
-                    .font(.headline)
-                    .foregroundStyle(Color.tmInk)
-                Text(detail)
-                    .font(.subheadline)
-                    .foregroundStyle(Color.tmSlate)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            Spacer()
-            Image(systemName: "chevron.right")
-                .font(.caption.weight(.bold))
-                .foregroundStyle(Color.tmSlate)
-        }
-        .padding(16)
-        .background(.white)
-        .clipShape(RoundedRectangle(cornerRadius: 8))
     }
 }
 

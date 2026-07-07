@@ -4,6 +4,7 @@ struct AuthUser {
     let uid: String
     let email: String
     let idToken: String
+    let refreshToken: String
 }
 
 struct UserProfile {
@@ -33,6 +34,7 @@ enum LocalAuthError: LocalizedError {
     case invalidResponse
     case server(String)
     case profileNotFound
+    case invalidInput(String)
 
     var errorDescription: String? {
         switch self {
@@ -42,6 +44,73 @@ enum LocalAuthError: LocalizedError {
             return message
         case .profileNotFound:
             return "We could not find your local profile data."
+        case .invalidInput(let message):
+            return message
+        }
+    }
+}
+
+enum AuthValidator {
+    static func normalizedEmail(_ email: String) throws -> String {
+        let value = email.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let parts = value.split(separator: "@", omittingEmptySubsequences: false)
+        guard parts.count == 2,
+              !parts[0].isEmpty,
+              parts[1].contains("."),
+              !parts[1].hasPrefix("."),
+              !parts[1].hasSuffix(".") else {
+            throw LocalAuthError.invalidInput("Enter a valid email address.")
+        }
+        return value
+    }
+
+    static func registration(
+        firstName: String,
+        lastName: String,
+        email: String,
+        phone: String,
+        password: String,
+        confirmPassword: String
+    ) throws -> (firstName: String, lastName: String, email: String, phone: String) {
+        let profile = try profile(firstName: firstName, lastName: lastName, email: email, phone: phone)
+        try validatePassword(password)
+        guard password == confirmPassword else {
+            throw LocalAuthError.invalidInput("Passwords do not match.")
+        }
+
+        return profile
+    }
+
+    static func profile(
+        firstName: String,
+        lastName: String,
+        email: String,
+        phone: String
+    ) throws -> (firstName: String, lastName: String, email: String, phone: String) {
+        let firstName = firstName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let lastName = lastName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let phone = phone.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard !firstName.isEmpty, !lastName.isEmpty else {
+            throw LocalAuthError.invalidInput("Enter your first and last name.")
+        }
+        guard phone.filter(\.isNumber).count >= 7 else {
+            throw LocalAuthError.invalidInput("Enter a valid phone number.")
+        }
+
+        return (firstName, lastName, try normalizedEmail(email), phone)
+    }
+
+    static func login(email: String, password: String) throws -> String {
+        guard !password.isEmpty else {
+            throw LocalAuthError.invalidInput("Enter your password.")
+        }
+        return try normalizedEmail(email)
+    }
+
+    private static func validatePassword(_ password: String) throws {
+        guard password.count >= 6 else {
+            throw LocalAuthError.invalidInput("Password must be at least 6 characters.")
         }
     }
 }
@@ -62,4 +131,3 @@ enum AppRole: String, CaseIterable, Identifiable {
         self == .driver ? "car.fill" : "person.fill"
     }
 }
-

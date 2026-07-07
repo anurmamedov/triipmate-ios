@@ -5,7 +5,18 @@ struct RootView: View {
     @State private var selectedTab: MainTab = .home
 
     var body: some View {
-        if session.isAuthenticated {
+        if session.isRestoringSession {
+            VStack(spacing: 16) {
+                Image(systemName: "car.2.fill")
+                    .font(.system(size: 48))
+                    .foregroundStyle(Color.tmGreen)
+                ProgressView("Restoring your session...")
+                    .tint(Color.tmGreen)
+                    .foregroundStyle(Color.tmSlate)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(Color.tmMist.ignoresSafeArea())
+        } else if session.isAuthenticated {
             ZStack {
                 if session.activeRole == .passenger {
                     passengerTabs

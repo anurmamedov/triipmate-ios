@@ -23,6 +23,7 @@
 		8A000001000000000000000F /* AppSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A0000010000000000000022 /* AppSession.swift */; };
 		8A0000010000000000000023 /* LocalFirebaseServices.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A0000010000000000000024 /* LocalFirebaseServices.swift */; };
 		8A0000010000000000000025 /* MarketplaceModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A0000010000000000000026 /* MarketplaceModels.swift */; };
+		8A0000010000000000000027 /* AuthSessionStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A0000010000000000000028 /* AuthSessionStore.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -45,6 +46,7 @@
 		8A0000010000000000000022 /* AppSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppSession.swift; sourceTree = "<group>"; };
 		8A0000010000000000000024 /* LocalFirebaseServices.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalFirebaseServices.swift; sourceTree = "<group>"; };
 		8A0000010000000000000026 /* MarketplaceModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarketplaceModels.swift; sourceTree = "<group>"; };
+		8A0000010000000000000028 /* AuthSessionStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthSessionStore.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -123,6 +125,7 @@
 		8A00000100000000000000A4 /* Services */ = {
 			isa = PBXGroup;
 			children = (
+				8A0000010000000000000028 /* AuthSessionStore.swift */,
 				8A0000010000000000000024 /* LocalFirebaseServices.swift */,
 			);
 			path = Services;
@@ -279,6 +282,7 @@
 				8A0000010000000000000025 /* MarketplaceModels.swift in Sources */,
 				8A000001000000000000000F /* AppSession.swift in Sources */,
 				8A0000010000000000000023 /* LocalFirebaseServices.swift in Sources */,
+				8A0000010000000000000027 /* AuthSessionStore.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

@@ -26,13 +26,13 @@ This plan reflects the active Xcode target as of July 2026. The project now uses
 
 **Done when:** one documented command starts Auth, Firestore, Storage, and the Emulator UI without losing local data.
 
-## 3. Stabilize Authentication `[~]`
+## 3. Stabilize Authentication `[x]`
 
-- Keep real registration, login, logout, and email updates.
-- Persist login after closing and reopening the app.
-- Improve validation and user-friendly error handling.
-- Complete or remove placeholder password-reset and verification screens.
-- Test duplicate email, invalid password, logout, and changed-email login.
+- Kept real registration, login, logout, and email updates against the Auth emulator.
+- Persisted the Firebase refresh token in Keychain and restore sessions when the app reopens.
+- Added consistent name, email, phone, password, and confirmation validation with user-friendly errors.
+- Replaced placeholder reset and verification screens with a real local Firebase password-reset flow.
+- Added a disposable-user emulator test for duplicate email, invalid password, token refresh, email changes, reset, login, and cleanup.
 
 **Done when:** the complete authentication lifecycle behaves predictably against the local Auth emulator.
 

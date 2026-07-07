@@ -336,6 +336,7 @@ private extension VehicleSnapshot {
 
 struct LocalFirebaseAuthService {
     private let baseURL = URL(string: "http://127.0.0.1:9099/identitytoolkit.googleapis.com/v1")!
+    private let tokenURL = URL(string: "http://127.0.0.1:9099/securetoken.googleapis.com/v1/token")!
     private let apiKey = "triipmate-local"
 
     func register(email: String, password: String) async throws -> AuthUser {
@@ -344,6 +345,42 @@ struct LocalFirebaseAuthService {
 
     func login(email: String, password: String) async throws -> AuthUser {
         try await sendAuthRequest(endpoint: "accounts:signInWithPassword", email: email, password: password)
+    }
+
+    func restore(refreshToken: String) async throws -> AuthUser {
+        var components = URLComponents(url: tokenURL, resolvingAgainstBaseURL: false)!
+        components.queryItems = [URLQueryItem(name: "key", value: apiKey)]
+
+        var request = URLRequest(url: components.url!)
+        request.httpMethod = "POST"
+        request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
+        var formAllowedCharacters = CharacterSet.alphanumerics
+        formAllowedCharacters.insert(charactersIn: "-._~")
+        let encodedToken = refreshToken.addingPercentEncoding(withAllowedCharacters: formAllowedCharacters) ?? refreshToken
+        request.httpBody = Data("grant_type=refresh_token&refresh_token=\(encodedToken)".utf8)
+
+        let tokenResponse: TokenRefreshResponse = try await decodedResponse(for: request)
+        let account = try await lookup(idToken: tokenResponse.idToken)
+        return AuthUser(
+            uid: tokenResponse.userId,
+            email: account.email,
+            idToken: tokenResponse.idToken,
+            refreshToken: tokenResponse.refreshToken
+        )
+    }
+
+    func sendPasswordReset(email: String) async throws {
+        var components = URLComponents(url: baseURL.appendingPathComponent("accounts:sendOobCode"), resolvingAgainstBaseURL: false)!
+        components.queryItems = [URLQueryItem(name: "key", value: apiKey)]
+
+        var request = URLRequest(url: components.url!)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONEncoder().encode(
+            PasswordResetRequest(requestType: "PASSWORD_RESET", email: email)
+        )
+
+        let _: PasswordResetResponse = try await decodedResponse(for: request)
     }
 
     func updateEmail(idToken: String, email: String) async throws -> AuthUser {
@@ -364,7 +401,12 @@ struct LocalFirebaseAuthService {
 
         if (200..<300).contains(httpResponse.statusCode) {
             let authResponse = try JSONDecoder().decode(AuthResponse.self, from: data)
-            return AuthUser(uid: authResponse.localId, email: authResponse.email, idToken: authResponse.idToken)
+            return AuthUser(
+                uid: authResponse.localId,
+                email: authResponse.email,
+                idToken: authResponse.idToken,
+                refreshToken: authResponse.refreshToken
+            )
         }
 
         if let errorResponse = try? JSONDecoder().decode(AuthErrorResponse.self, from: data) {
@@ -390,13 +432,48 @@ struct LocalFirebaseAuthService {
 
         if (200..<300).contains(httpResponse.statusCode) {
             let authResponse = try JSONDecoder().decode(AuthResponse.self, from: data)
-            return AuthUser(uid: authResponse.localId, email: authResponse.email, idToken: authResponse.idToken)
+            return AuthUser(
+                uid: authResponse.localId,
+                email: authResponse.email,
+                idToken: authResponse.idToken,
+                refreshToken: authResponse.refreshToken
+            )
         }
 
         if let errorResponse = try? JSONDecoder().decode(AuthErrorResponse.self, from: data) {
             throw LocalAuthError.server(errorResponse.error.message.authFriendlyMessage)
         }
 
+        throw LocalAuthError.invalidResponse
+    }
+
+    private func lookup(idToken: String) async throws -> AccountLookupUser {
+        var components = URLComponents(url: baseURL.appendingPathComponent("accounts:lookup"), resolvingAgainstBaseURL: false)!
+        components.queryItems = [URLQueryItem(name: "key", value: apiKey)]
+
+        var request = URLRequest(url: components.url!)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONEncoder().encode(AccountLookupRequest(idToken: idToken))
+
+        let response: AccountLookupResponse = try await decodedResponse(for: request)
+        guard let user = response.users.first else {
+            throw LocalAuthError.invalidResponse
+        }
+        return user
+    }
+
+    private func decodedResponse<Response: Decodable>(for request: URLRequest) async throws -> Response {
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw LocalAuthError.invalidResponse
+        }
+        if (200..<300).contains(httpResponse.statusCode) {
+            return try JSONDecoder().decode(Response.self, from: data)
+        }
+        if let errorResponse = try? JSONDecoder().decode(AuthErrorResponse.self, from: data) {
+            throw LocalAuthError.server(errorResponse.error.message.authFriendlyMessage)
+        }
         throw LocalAuthError.invalidResponse
     }
 }
@@ -417,6 +494,41 @@ private struct AuthResponse: Decodable {
     let localId: String
     let email: String
     let idToken: String
+    let refreshToken: String
+}
+
+private struct TokenRefreshResponse: Decodable {
+    let userId: String
+    let idToken: String
+    let refreshToken: String
+
+    enum CodingKeys: String, CodingKey {
+        case userId = "user_id"
+        case idToken = "id_token"
+        case refreshToken = "refresh_token"
+    }
+}
+
+private struct AccountLookupRequest: Encodable {
+    let idToken: String
+}
+
+private struct AccountLookupResponse: Decodable {
+    let users: [AccountLookupUser]
+}
+
+private struct AccountLookupUser: Decodable {
+    let localId: String
+    let email: String
+}
+
+private struct PasswordResetRequest: Encodable {
+    let requestType: String
+    let email: String
+}
+
+private struct PasswordResetResponse: Decodable {
+    let email: String
 }
 
 private struct AuthErrorResponse: Decodable {
@@ -438,6 +550,8 @@ private extension String {
             return "Incorrect password."
         case "WEAK_PASSWORD : Password should be at least 6 characters":
             return "Password should be at least 6 characters."
+        case "INVALID_REFRESH_TOKEN", "TOKEN_EXPIRED", "USER_DISABLED", "USER_NOT_FOUND":
+            return "Your saved session has expired. Please log in again."
         default:
             return replacingOccurrences(of: "_", with: " ").capitalized
         }

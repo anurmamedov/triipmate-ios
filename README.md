@@ -7,7 +7,7 @@ TriipMate is a SwiftUI application for matching long-distance travelers who want
 The active app currently supports:
 
 - Passenger and driver modes
-- Local Firebase registration, login, email updates, and logout
+- Local Firebase registration, login, password reset, email updates, persisted sessions, and logout
 - Firestore-backed user profiles and vehicle management
 - Storage-backed profile photos
 - Firestore-backed ride publishing from the driver Post Ride form
@@ -95,6 +95,16 @@ After cloning the repository on another Mac:
 5. Open `TriipMate.xcodeproj` and run the app in an iPhone simulator.
 
 No production Firebase account or credentials are required for this local workflow.
+
+### Test local authentication
+
+With the emulators running, execute:
+
+```bash
+./scripts/test-auth-emulator.sh
+```
+
+The script uses a disposable account to verify registration, duplicate-email and invalid-password errors, token refresh, email updates, password reset, login, and cleanup. The iOS app stores only the Firebase refresh token in Keychain, restores the session at launch, and clears it on logout.
 
 ### 2. Run the iOS app
 
