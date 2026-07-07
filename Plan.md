@@ -17,12 +17,12 @@ This plan reflects the active Xcode target as of July 2026. The project now uses
 
 **Done when:** the Xcode target contains one implementation of each screen and service, and every source file has a clear purpose.
 
-## 2. Standardize Local Setup `[~]`
+## 2. Standardize Local Setup `[x]`
 
-- Create one command to start Firebase emulators.
-- Automatically import and export local emulator data.
-- Document Firebase CLI, JDK 21, ports, and simulator setup.
-- Confirm a teammate can start the project from a fresh clone.
+- Added `./scripts/start-emulators.sh` as the single emulator command.
+- Automatically import and export local emulator data through `firebase-dataok/`.
+- Check and document Firebase CLI, JDK 21, ports, configuration, and simulator setup.
+- Added and verified a fresh-clone readiness workflow for teammates.
 
 **Done when:** one documented command starts Auth, Firestore, Storage, and the Emulator UI without losing local data.
 

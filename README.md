@@ -19,8 +19,16 @@ Ride publishing, real search, requests, trip history, and messaging are not yet 
 
 - macOS with Xcode 16 or newer
 - iOS 16 or newer simulator runtime
-- Firebase CLI
+- Firebase CLI 15 or newer
 - JDK 21 for the Firestore and Storage emulators
+
+Verify the local dependencies and committed emulator configuration:
+
+```bash
+./scripts/start-emulators.sh --check
+```
+
+The check reports a clear error when Firebase CLI, JDK 21, configuration, rules, or imported data are missing.
 
 ## Active Project Structure
 
@@ -58,11 +66,10 @@ There is one active implementation of each screen and service. Add new shared in
 From the repository root:
 
 ```bash
-firebase emulators:start \
-  --project demo-triipmate-local \
-  --import=./firebase-dataok \
-  --export-on-exit=./firebase-dataok
+./scripts/start-emulators.sh
 ```
+
+This single command checks dependencies, starts Auth, Firestore, Storage, and the Emulator UI, imports `firebase-dataok/`, and exports updated local data back to the same folder when stopped with `Control-C`.
 
 Local services:
 
@@ -74,6 +81,18 @@ Local services:
 | Storage | 127.0.0.1:9199 |
 
 The app is configured for the demo project `demo-triipmate-local`. Production Firebase is not used by the active local implementation.
+
+### Fresh-clone check
+
+After cloning the repository on another Mac:
+
+1. Install Xcode, Firebase CLI 15 or newer, and JDK 21.
+2. Run `./scripts/start-emulators.sh --check` from the repository root.
+3. Run `./scripts/start-emulators.sh` and confirm all four services appear in the Emulator UI.
+4. Stop with `Control-C`, restart, and confirm the local Auth and Firestore data is still present.
+5. Open `TriipMate.xcodeproj` and run the app in an iPhone simulator.
+
+No production Firebase account or credentials are required for this local workflow.
 
 ### 2. Run the iOS app
 
