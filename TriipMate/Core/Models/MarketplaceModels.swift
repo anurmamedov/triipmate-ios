@@ -46,6 +46,10 @@ struct FirestoreTimestamp: Codable, Hashable {
         seconds = Int64(date.timeIntervalSince1970)
         nanoseconds = 0
     }
+
+    var date: Date {
+        Date(timeIntervalSince1970: TimeInterval(seconds) + TimeInterval(nanoseconds) / 1_000_000_000)
+    }
 }
 
 enum RideStatus: String, Codable, CaseIterable, Identifiable {

@@ -18,10 +18,12 @@ struct PublishTripView: View {
     @State private var carYear = ""
     @State private var powerType = "Fuel"
     @State private var bodyType = "Sedan"
+    @State private var saveNewVehicle = false
     @State private var luggageAllowed = true
     @State private var petsAllowed = false
     @State private var smokingAllowed = false
     @State private var note = ""
+    @State private var publishMessage: PublishMessage?
 
     var body: some View {
         NavigationStack {
@@ -122,6 +124,13 @@ struct PublishTripView: View {
             .scrollContentBackground(.hidden)
             .background(Color.tmMist)
             .onAppear(perform: selectDefaultVehicle)
+            .alert(item: $publishMessage) { message in
+                Alert(
+                    title: Text(message.title),
+                    message: Text(message.body),
+                    dismissButton: .default(Text("OK"))
+                )
+            }
         }
     }
 
@@ -150,6 +159,7 @@ struct PublishTripView: View {
             Text("Truck").tag("Truck")
             Text("Hatchback").tag("Hatchback")
         }
+        Toggle("Save this vehicle to my profile", isOn: $saveNewVehicle)
     }
 
     private func selectDefaultVehicle() {
@@ -159,14 +169,25 @@ struct PublishTripView: View {
 
     private var publishAction: some View {
         Button {
+            Task {
+                await publishRide()
+            }
         } label: {
-            Label("Publish ride", systemImage: "checkmark.circle.fill")
-                .font(.headline)
-                .frame(maxWidth: .infinity)
-                .frame(height: 50)
+            if session.isRidePublishing {
+                ProgressView()
+                    .tint(.white)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 50)
+            } else {
+                Label("Publish ride", systemImage: "checkmark.circle.fill")
+                    .font(.headline)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 50)
+            }
         }
         .buttonStyle(.borderedProminent)
         .tint(Color.tmGreen)
+        .disabled(session.isRidePublishing)
         .padding(.horizontal, 20)
         .padding(.vertical, 10)
         .background(Color.tmMist)
@@ -246,5 +267,210 @@ struct PublishTripView: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel(accessibilityLabel)
+    }
+
+    @MainActor
+    private func publishRide() async {
+        guard let profile = session.userProfile else {
+            publishMessage = .failure("Please log in before publishing a ride.")
+            return
+        }
+
+        let trimmedFrom = from.trimmed
+        let trimmedTo = to.trimmed
+        let trimmedMake = carMake.trimmed
+        let trimmedModel = carModel.trimmed
+        let trimmedYear = carYear.trimmed
+
+        guard !trimmedFrom.isEmpty, !trimmedTo.isEmpty else {
+            publishMessage = .failure("Please add both route cities.")
+            return
+        }
+
+        guard seats <= totalSeats else {
+            publishMessage = .failure("Available seats cannot be more than total seats.")
+            return
+        }
+
+        let vehicleSnapshot: VehicleSnapshot
+        var vehicleToSave: SavedVehicle?
+
+        if let selectedVehicle {
+            vehicleSnapshot = VehicleSnapshot(
+                vehicleId: selectedVehicle.id,
+                make: selectedVehicle.make,
+                model: selectedVehicle.model,
+                year: selectedVehicle.year,
+                powerType: selectedVehicle.powerType,
+                bodyType: selectedVehicle.bodyType
+            )
+        } else {
+            guard !trimmedMake.isEmpty, !trimmedModel.isEmpty, trimmedYear.count == 4 else {
+                publishMessage = .failure("Please complete the vehicle details.")
+                return
+            }
+
+            let vehicleId = UUID().uuidString.lowercased()
+            vehicleSnapshot = VehicleSnapshot(
+                vehicleId: saveNewVehicle ? vehicleId : nil,
+                make: trimmedMake,
+                model: trimmedModel,
+                year: trimmedYear,
+                powerType: powerType,
+                bodyType: bodyType
+            )
+
+            if saveNewVehicle {
+                vehicleToSave = SavedVehicle(
+                    id: vehicleId,
+                    make: trimmedMake,
+                    model: trimmedModel,
+                    year: trimmedYear,
+                    powerType: powerType,
+                    bodyType: bodyType
+                )
+            }
+        }
+
+        let departureDate = combinedDate(day: date, time: startTime)
+        var arrivalDate = combinedDate(day: date, time: arrivalTime)
+        if arrivalDate <= departureDate {
+            arrivalDate = Calendar.current.date(byAdding: .day, value: 1, to: arrivalDate) ?? arrivalDate
+        }
+
+        let now = Date()
+        let ride = MarketplaceRide(
+            id: UUID().uuidString.lowercased(),
+            driverUid: profile.uid,
+            driverDisplayName: profile.displayName,
+            driverProfilePhotoPath: profile.profilePhotoPath,
+            from: RouteEndpoint(displayName: trimmedFrom),
+            to: RouteEndpoint(displayName: trimmedTo),
+            departureAt: FirestoreTimestamp(date: departureDate),
+            expectedArrivalAt: FirestoreTimestamp(date: arrivalDate),
+            estimatedDurationMinutes: max(Int(arrivalDate.timeIntervalSince(departureDate) / 60), 1),
+            availableSeats: seats,
+            totalSeats: totalSeats,
+            pricePerSeatCents: Int(price.rounded()) * 100,
+            vehicle: vehicleSnapshot,
+            status: .published,
+            notes: publishNotes,
+            createdAt: FirestoreTimestamp(date: now),
+            updatedAt: FirestoreTimestamp(date: now)
+        )
+
+        if await session.publishRide(ride, vehicleToSave: vehicleToSave) {
+            resetFormAfterPublish()
+            publishMessage = .success("Your ride was saved to Firestore and is ready for passenger search in the next step.")
+        } else {
+            publishMessage = .failure(session.authError ?? "The ride could not be published.")
+        }
+    }
+
+    private var publishNotes: String {
+        var lines: [String] = []
+
+        if !pickupPoint.trimmed.isEmpty {
+            lines.append("Pickup: \(pickupPoint.trimmed)")
+        }
+
+        if !dropoffPoint.trimmed.isEmpty {
+            lines.append("Drop-off: \(dropoffPoint.trimmed)")
+        }
+
+        lines.append("Luggage: \(luggageAllowed ? "Allowed" : "Not allowed")")
+        lines.append("Pets: \(petsAllowed ? "Allowed" : "Not allowed")")
+        lines.append("Smoking: \(smokingAllowed ? "Allowed" : "Not allowed")")
+
+        if !note.trimmed.isEmpty {
+            lines.append(note.trimmed)
+        }
+
+        return lines.joined(separator: "\n")
+    }
+
+    private func combinedDate(day: Date, time: Date) -> Date {
+        let calendar = Calendar.current
+        let dayComponents = calendar.dateComponents([.year, .month, .day], from: day)
+        let timeComponents = calendar.dateComponents([.hour, .minute], from: time)
+
+        var components = DateComponents()
+        components.year = dayComponents.year
+        components.month = dayComponents.month
+        components.day = dayComponents.day
+        components.hour = timeComponents.hour
+        components.minute = timeComponents.minute
+
+        return calendar.date(from: components) ?? day
+    }
+
+    private func resetFormAfterPublish() {
+        from = ""
+        to = ""
+        pickupPoint = ""
+        dropoffPoint = ""
+        date = Date()
+        startTime = Date()
+        arrivalTime = Date()
+        totalSeats = 4
+        seats = 2
+        price = 120
+        selectedVehicleID = session.savedVehicles.first?.id ?? "new"
+        carMake = ""
+        carModel = ""
+        carYear = ""
+        powerType = "Fuel"
+        bodyType = "Sedan"
+        saveNewVehicle = false
+        luggageAllowed = true
+        petsAllowed = false
+        smokingAllowed = false
+        note = ""
+    }
+}
+
+private struct PublishMessage: Identifiable {
+    let id = UUID()
+    let title: String
+    let body: String
+
+    static func success(_ body: String) -> PublishMessage {
+        PublishMessage(title: "Ride published", body: body)
+    }
+
+    static func failure(_ body: String) -> PublishMessage {
+        PublishMessage(title: "Cannot publish ride", body: body)
+    }
+}
+
+private extension String {
+    var trimmed: String {
+        trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+}
+
+private extension UserProfile {
+    var displayName: String {
+        "\(firstName) \(lastName)".trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+}
+
+private extension RouteEndpoint {
+    init(displayName: String) {
+        let parts = displayName
+            .split(separator: ",", maxSplits: 1)
+            .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
+
+        let city = parts.first ?? displayName
+        let state = parts.count > 1 ? parts[1] : ""
+        self.init(
+            city: city,
+            state: state,
+            displayName: displayName,
+            normalizedName: displayName
+                .folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
+                .lowercased()
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+        )
     }
 }

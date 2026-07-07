@@ -64,14 +64,14 @@ This plan reflects the active Xcode target as of July 2026. The project now uses
 
 **Done when:** every marketplace entity has one documented schema that can round-trip through the Firestore emulator.
 
-## 7. Build Ride Publishing `[ ]`
+## 7. Build Ride Publishing `[x]`
 
-- Connect Post Ride to Firestore.
-- Validate all required information.
-- Support saved and newly entered vehicles.
-- Save a new vehicle only when the driver chooses to do so.
-- Prevent duplicate submissions.
-- Show loading, success, and failure states.
+- Connected Post Ride to Firestore.
+- Added validation for route, seats, and vehicle details.
+- Supported saved vehicles and newly entered vehicles.
+- Added an explicit choice before saving a new vehicle to the driver's profile.
+- Prevented duplicate submissions with a publishing state.
+- Added loading, success, and failure states.
 
 **Done when:** publishing creates a real ride that survives an emulator restart.
 
@@ -158,4 +158,4 @@ This plan reflects the active Xcode target as of July 2026. The project now uses
 
 ## Recommended Next Work
 
-Complete stage **7** next. The project now has a clean foundation, local emulator workflow, and documented Firestore marketplace schema. Post Ride should become the first complete Firestore-backed marketplace workflow before requests and messaging add more cross-feature complexity.
+Complete stages **8** and **9** next. Ride publishing is now the first Firestore-backed marketplace workflow; drivers should be able to manage their published rides, and passengers should be able to search real Firestore rides.

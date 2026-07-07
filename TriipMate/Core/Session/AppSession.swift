@@ -12,11 +12,13 @@ final class AppSession: ObservableObject {
     @Published var isProfileWorking = false
     @Published var isProfilePhotoWorking = false
     @Published var isVehicleWorking = false
+    @Published var isRidePublishing = false
 
     private let authService = LocalFirebaseAuthService()
     private let profileService = LocalFirestoreProfileService()
     private let storageService = LocalStorageProfilePhotoService()
     private let vehicleService = LocalFirestoreVehicleService()
+    private let rideService = LocalFirestoreRideService()
 
     @MainActor
     func register(firstName: String, lastName: String, email: String, phone: String, password: String, confirmPassword: String) async {
@@ -160,6 +162,36 @@ final class AppSession: ObservableObject {
     }
 
     @MainActor
+    func publishRide(_ ride: MarketplaceRide, vehicleToSave: SavedVehicle?) async -> Bool {
+        guard let authUser else {
+            authError = "Please log in before publishing a ride."
+            return false
+        }
+
+        isRidePublishing = true
+        authError = nil
+        defer { isRidePublishing = false }
+
+        do {
+            if let vehicleToSave {
+                try await vehicleService.save(vehicleToSave, uid: authUser.uid, idToken: authUser.idToken)
+                if let index = savedVehicles.firstIndex(where: { $0.id == vehicleToSave.id }) {
+                    savedVehicles[index] = vehicleToSave
+                } else {
+                    savedVehicles.append(vehicleToSave)
+                }
+                savedVehicles.sort { $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending }
+            }
+
+            try await rideService.save(ride, idToken: authUser.idToken)
+            return true
+        } catch {
+            authError = error.localizedDescription
+            return false
+        }
+    }
+
+    @MainActor
     private func performAuth(_ action: () async throws -> (AuthUser, UserProfile)) async {
         isAuthWorking = true
         authError = nil
@@ -179,4 +211,3 @@ final class AppSession: ObservableObject {
         }
     }
 }
-

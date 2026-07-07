@@ -157,6 +157,28 @@ struct LocalFirestoreVehicleService {
     }
 }
 
+struct LocalFirestoreRideService {
+    private let projectId = "demo-triipmate-local"
+
+    private var ridesURL: URL {
+        URL(string: "http://127.0.0.1:8080/v1/projects/\(projectId)/databases/(default)/documents/rides")!
+    }
+
+    func save(_ ride: MarketplaceRide, idToken: String) async throws {
+        var request = URLRequest(url: ridesURL.appendingPathComponent(ride.id))
+        request.httpMethod = "PATCH"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("Bearer \(idToken)", forHTTPHeaderField: "Authorization")
+        request.httpBody = try JSONEncoder().encode(FirestoreRideDocument(ride: ride))
+
+        let (_, response) = try await URLSession.shared.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse,
+              (200..<300).contains(httpResponse.statusCode) else {
+            throw LocalAuthError.invalidResponse
+        }
+    }
+}
+
 private struct FirestoreVehicleDocument: Codable {
     let name: String?
     let fields: [String: FirestoreStringValue]
@@ -209,6 +231,107 @@ private struct FirestoreUserFields: Codable {
 
 private struct FirestoreStringValue: Codable {
     let stringValue: String
+}
+
+private struct FirestoreRideDocument: Encodable {
+    let fields: [String: FirestoreRideValue]
+
+    init(ride: MarketplaceRide) {
+        var rideFields: [String: FirestoreRideValue] = [
+            "driverUid": .string(ride.driverUid),
+            "driverDisplayName": .string(ride.driverDisplayName),
+            "from": .map(ride.from.firestoreFields),
+            "to": .map(ride.to.firestoreFields),
+            "departureAt": .timestamp(ride.departureAt.date),
+            "estimatedDurationMinutes": .integer(ride.estimatedDurationMinutes),
+            "availableSeats": .integer(ride.availableSeats),
+            "totalSeats": .integer(ride.totalSeats),
+            "pricePerSeatCents": .integer(ride.pricePerSeatCents),
+            "vehicle": .map(ride.vehicle.firestoreFields),
+            "status": .string(ride.status.rawValue),
+            "notes": .string(ride.notes),
+            "createdAt": .timestamp(ride.createdAt.date),
+            "updatedAt": .timestamp(ride.updatedAt.date)
+        ]
+
+        if let driverProfilePhotoPath = ride.driverProfilePhotoPath {
+            rideFields["driverProfilePhotoPath"] = .string(driverProfilePhotoPath)
+        }
+
+        if let expectedArrivalAt = ride.expectedArrivalAt {
+            rideFields["expectedArrivalAt"] = .timestamp(expectedArrivalAt.date)
+        }
+
+        fields = rideFields
+    }
+}
+
+private enum FirestoreRideValue: Encodable {
+    case string(String)
+    case integer(Int)
+    case timestamp(Date)
+    case map([String: FirestoreRideValue])
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+
+        switch self {
+        case .string(let value):
+            try container.encode(value, forKey: .stringValue)
+        case .integer(let value):
+            try container.encode(String(value), forKey: .integerValue)
+        case .timestamp(let date):
+            try container.encode(Self.timestampFormatter.string(from: date), forKey: .timestampValue)
+        case .map(let fields):
+            try container.encode(FirestoreMapValue(fields: fields), forKey: .mapValue)
+        }
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case stringValue
+        case integerValue
+        case timestampValue
+        case mapValue
+    }
+
+    private static let timestampFormatter: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return formatter
+    }()
+}
+
+private struct FirestoreMapValue: Encodable {
+    let fields: [String: FirestoreRideValue]
+}
+
+private extension RouteEndpoint {
+    var firestoreFields: [String: FirestoreRideValue] {
+        [
+            "city": .string(city),
+            "state": .string(state),
+            "displayName": .string(displayName),
+            "normalizedName": .string(normalizedName)
+        ]
+    }
+}
+
+private extension VehicleSnapshot {
+    var firestoreFields: [String: FirestoreRideValue] {
+        var fields: [String: FirestoreRideValue] = [
+            "make": .string(make),
+            "model": .string(model),
+            "year": .string(year),
+            "powerType": .string(powerType),
+            "bodyType": .string(bodyType)
+        ]
+
+        if let vehicleId {
+            fields["vehicleId"] = .string(vehicleId)
+        }
+
+        return fields
+    }
 }
 
 struct LocalFirebaseAuthService {
@@ -320,4 +443,3 @@ private extension String {
         }
     }
 }
-

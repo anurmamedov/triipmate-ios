@@ -10,10 +10,11 @@ The active app currently supports:
 - Local Firebase registration, login, email updates, and logout
 - Firestore-backed user profiles and vehicle management
 - Storage-backed profile photos
+- Firestore-backed ride publishing from the driver Post Ride form
 - Ride search, ride details, ride requests, trips, and messages as prototype/sample-data interfaces
-- Driver Post Ride form with saved-vehicle selection
+- Driver Post Ride form with saved-vehicle selection and optional new-vehicle saving
 
-Ride publishing, real search, requests, trip history, and messaging are not yet connected end to end to Firestore. See [Plan.md](Plan.md) for the implementation order.
+Real search, requests, trip history, and messaging are not yet connected end to end to Firestore. See [Plan.md](Plan.md) for the implementation order.
 
 ## Requirements
 
