@@ -1,0 +1,323 @@
+import Foundation
+
+struct LocalStorageProfilePhotoService {
+    private let bucket = "demo-triipmate-local.appspot.com"
+
+    private var baseURL: URL {
+        URL(string: "http://127.0.0.1:9199/v0/b/\(bucket)/o")!
+    }
+
+    func upload(imageData: Data, path: String, idToken: String) async throws {
+        var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false)!
+        components.queryItems = [
+            URLQueryItem(name: "uploadType", value: "media"),
+            URLQueryItem(name: "name", value: path)
+        ]
+
+        var request = URLRequest(url: components.url!)
+        request.httpMethod = "POST"
+        request.setValue("image/jpeg", forHTTPHeaderField: "Content-Type")
+        request.setValue("Bearer \(idToken)", forHTTPHeaderField: "Authorization")
+        request.httpBody = imageData
+
+        let (_, response) = try await URLSession.shared.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse, (200..<300).contains(httpResponse.statusCode) else {
+            throw LocalAuthError.invalidResponse
+        }
+    }
+
+    func download(path: String, idToken: String) async throws -> Data {
+        let encodedPath = path.storagePathEncoded
+        var components = URLComponents(string: "\(baseURL.absoluteString)/\(encodedPath)")!
+        components.queryItems = [URLQueryItem(name: "alt", value: "media")]
+
+        var request = URLRequest(url: components.url!)
+        request.setValue("Bearer \(idToken)", forHTTPHeaderField: "Authorization")
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse, (200..<300).contains(httpResponse.statusCode) else {
+            throw LocalAuthError.invalidResponse
+        }
+        return data
+    }
+}
+
+private extension String {
+    var storagePathEncoded: String {
+        var allowed = CharacterSet.urlPathAllowed
+        allowed.remove(charactersIn: "/")
+        return addingPercentEncoding(withAllowedCharacters: allowed) ?? self
+    }
+}
+
+struct LocalFirestoreProfileService {
+    private let projectId = "demo-triipmate-local"
+
+    private var baseURL: URL {
+        URL(string: "http://127.0.0.1:8080/v1/projects/\(projectId)/databases/(default)/documents/users")!
+    }
+
+    func save(_ profile: UserProfile, idToken: String) async throws {
+        var request = URLRequest(url: baseURL.appendingPathComponent(profile.uid))
+        request.httpMethod = "PATCH"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("Bearer \(idToken)", forHTTPHeaderField: "Authorization")
+        request.httpBody = try JSONEncoder().encode(FirestoreUserDocument(fields: .init(profile: profile)))
+
+        let (_, response) = try await URLSession.shared.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse, (200..<300).contains(httpResponse.statusCode) else {
+            throw LocalAuthError.invalidResponse
+        }
+    }
+
+    func fetch(uid: String, idToken: String) async throws -> UserProfile {
+        var request = URLRequest(url: baseURL.appendingPathComponent(uid))
+        request.setValue("Bearer \(idToken)", forHTTPHeaderField: "Authorization")
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw LocalAuthError.invalidResponse
+        }
+
+        if httpResponse.statusCode == 404 {
+            throw LocalAuthError.profileNotFound
+        }
+
+        guard (200..<300).contains(httpResponse.statusCode) else {
+            throw LocalAuthError.invalidResponse
+        }
+
+        let document = try JSONDecoder().decode(FirestoreUserDocument.self, from: data)
+        return document.fields.profile(uid: uid)
+    }
+}
+
+struct LocalFirestoreVehicleService {
+    private let projectId = "demo-triipmate-local"
+
+    private var usersURL: URL {
+        URL(string: "http://127.0.0.1:8080/v1/projects/\(projectId)/databases/(default)/documents/users")!
+    }
+
+    func save(_ vehicle: SavedVehicle, uid: String, idToken: String) async throws {
+        let url = usersURL
+            .appendingPathComponent(uid)
+            .appendingPathComponent("vehicles")
+            .appendingPathComponent(vehicle.id)
+        var request = URLRequest(url: url)
+        request.httpMethod = "PATCH"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("Bearer \(idToken)", forHTTPHeaderField: "Authorization")
+        request.httpBody = try JSONEncoder().encode(
+            FirestoreVehicleDocument(fields: [
+                "make": FirestoreStringValue(stringValue: vehicle.make),
+                "model": FirestoreStringValue(stringValue: vehicle.model),
+                "year": FirestoreStringValue(stringValue: vehicle.year),
+                "powerType": FirestoreStringValue(stringValue: vehicle.powerType),
+                "bodyType": FirestoreStringValue(stringValue: vehicle.bodyType)
+            ])
+        )
+
+        let (_, response) = try await URLSession.shared.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse,
+              (200..<300).contains(httpResponse.statusCode) else {
+            throw LocalAuthError.invalidResponse
+        }
+    }
+
+    func fetchAll(uid: String, idToken: String) async throws -> [SavedVehicle] {
+        let url = usersURL.appendingPathComponent(uid).appendingPathComponent("vehicles")
+        var request = URLRequest(url: url)
+        request.setValue("Bearer \(idToken)", forHTTPHeaderField: "Authorization")
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse,
+              (200..<300).contains(httpResponse.statusCode) else {
+            throw LocalAuthError.invalidResponse
+        }
+
+        let collection = try JSONDecoder().decode(FirestoreVehicleCollection.self, from: data)
+        return (collection.documents ?? []).compactMap { document in
+            let fields = document.fields
+            guard let make = fields["make"]?.stringValue,
+                  let model = fields["model"]?.stringValue,
+                  let year = fields["year"]?.stringValue else {
+                return nil
+            }
+            return SavedVehicle(
+                id: document.name?.split(separator: "/").last.map(String.init) ?? UUID().uuidString,
+                make: make,
+                model: model,
+                year: year,
+                powerType: fields["powerType"]?.stringValue ?? "Fuel",
+                bodyType: fields["bodyType"]?.stringValue ?? "Sedan"
+            )
+        }
+        .sorted { $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending }
+    }
+}
+
+private struct FirestoreVehicleDocument: Codable {
+    let name: String?
+    let fields: [String: FirestoreStringValue]
+
+    init(name: String? = nil, fields: [String: FirestoreStringValue]) {
+        self.name = name
+        self.fields = fields
+    }
+}
+
+private struct FirestoreVehicleCollection: Decodable {
+    let documents: [FirestoreVehicleDocument]?
+}
+
+private struct FirestoreUserDocument: Codable {
+    let fields: FirestoreUserFields
+}
+
+private struct FirestoreUserFields: Codable {
+    let firstName: FirestoreStringValue
+    let lastName: FirestoreStringValue
+    let email: FirestoreStringValue
+    let phone: FirestoreStringValue
+    let role: FirestoreStringValue
+    let profilePhotoPath: FirestoreStringValue?
+    let updatedAt: FirestoreStringValue?
+
+    init(profile: UserProfile) {
+        firstName = FirestoreStringValue(stringValue: profile.firstName)
+        lastName = FirestoreStringValue(stringValue: profile.lastName)
+        email = FirestoreStringValue(stringValue: profile.email)
+        phone = FirestoreStringValue(stringValue: profile.phone)
+        role = FirestoreStringValue(stringValue: profile.role.rawValue)
+        profilePhotoPath = profile.profilePhotoPath.map(FirestoreStringValue.init(stringValue:))
+        updatedAt = FirestoreStringValue(stringValue: ISO8601DateFormatter().string(from: Date()))
+    }
+
+    func profile(uid: String) -> UserProfile {
+        UserProfile(
+            uid: uid,
+            firstName: firstName.stringValue,
+            lastName: lastName.stringValue,
+            email: email.stringValue,
+            phone: phone.stringValue,
+            role: AppRole(rawValue: role.stringValue) ?? .passenger,
+            profilePhotoPath: profilePhotoPath?.stringValue
+        )
+    }
+}
+
+private struct FirestoreStringValue: Codable {
+    let stringValue: String
+}
+
+struct LocalFirebaseAuthService {
+    private let baseURL = URL(string: "http://127.0.0.1:9099/identitytoolkit.googleapis.com/v1")!
+    private let apiKey = "triipmate-local"
+
+    func register(email: String, password: String) async throws -> AuthUser {
+        try await sendAuthRequest(endpoint: "accounts:signUp", email: email, password: password)
+    }
+
+    func login(email: String, password: String) async throws -> AuthUser {
+        try await sendAuthRequest(endpoint: "accounts:signInWithPassword", email: email, password: password)
+    }
+
+    func updateEmail(idToken: String, email: String) async throws -> AuthUser {
+        var components = URLComponents(url: baseURL.appendingPathComponent("accounts:update"), resolvingAgainstBaseURL: false)!
+        components.queryItems = [URLQueryItem(name: "key", value: apiKey)]
+
+        var request = URLRequest(url: components.url!)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONEncoder().encode(
+            UpdateEmailRequest(idToken: idToken, email: email, returnSecureToken: true)
+        )
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw LocalAuthError.invalidResponse
+        }
+
+        if (200..<300).contains(httpResponse.statusCode) {
+            let authResponse = try JSONDecoder().decode(AuthResponse.self, from: data)
+            return AuthUser(uid: authResponse.localId, email: authResponse.email, idToken: authResponse.idToken)
+        }
+
+        if let errorResponse = try? JSONDecoder().decode(AuthErrorResponse.self, from: data) {
+            throw LocalAuthError.server(errorResponse.error.message.authFriendlyMessage)
+        }
+
+        throw LocalAuthError.invalidResponse
+    }
+
+    private func sendAuthRequest(endpoint: String, email: String, password: String) async throws -> AuthUser {
+        var components = URLComponents(url: baseURL.appendingPathComponent(endpoint), resolvingAgainstBaseURL: false)!
+        components.queryItems = [URLQueryItem(name: "key", value: apiKey)]
+
+        var request = URLRequest(url: components.url!)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONEncoder().encode(AuthRequest(email: email, password: password, returnSecureToken: true))
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw LocalAuthError.invalidResponse
+        }
+
+        if (200..<300).contains(httpResponse.statusCode) {
+            let authResponse = try JSONDecoder().decode(AuthResponse.self, from: data)
+            return AuthUser(uid: authResponse.localId, email: authResponse.email, idToken: authResponse.idToken)
+        }
+
+        if let errorResponse = try? JSONDecoder().decode(AuthErrorResponse.self, from: data) {
+            throw LocalAuthError.server(errorResponse.error.message.authFriendlyMessage)
+        }
+
+        throw LocalAuthError.invalidResponse
+    }
+}
+
+private struct AuthRequest: Encodable {
+    let email: String
+    let password: String
+    let returnSecureToken: Bool
+}
+
+private struct UpdateEmailRequest: Encodable {
+    let idToken: String
+    let email: String
+    let returnSecureToken: Bool
+}
+
+private struct AuthResponse: Decodable {
+    let localId: String
+    let email: String
+    let idToken: String
+}
+
+private struct AuthErrorResponse: Decodable {
+    let error: AuthErrorBody
+}
+
+private struct AuthErrorBody: Decodable {
+    let message: String
+}
+
+private extension String {
+    var authFriendlyMessage: String {
+        switch self {
+        case "EMAIL_EXISTS":
+            return "This email is already registered. Try logging in."
+        case "EMAIL_NOT_FOUND", "INVALID_LOGIN_CREDENTIALS":
+            return "No account found with this email and password."
+        case "INVALID_PASSWORD":
+            return "Incorrect password."
+        case "WEAK_PASSWORD : Password should be at least 6 characters":
+            return "Password should be at least 6 characters."
+        default:
+            return replacingOccurrences(of: "_", with: " ").capitalized
+        }
+    }
+}
+

@@ -24,24 +24,32 @@ Ride publishing, real search, requests, trip history, and messaging are not yet 
 
 ## Active Project Structure
 
-The Xcode target currently compiles the flat source files directly under `TriipMate/`:
+The app uses one feature-based source tree. Shared models, services, session state, and design tokens live under `Core`; screens are grouped under `Features`:
 
 ```text
 TriipMate/
-├── TriipMateApp.swift
-├── AuthViews.swift
-├── RootView.swift
-├── SearchView.swift
-├── RideCard.swift
-├── RideDetailView.swift
-├── PublishTripView.swift
-├── MessagesView.swift
-├── ProfileView.swift
-├── Models.swift
-└── Theme.swift
+├── App/
+│   └── TriipMateApp.swift
+├── Core/
+│   ├── DesignSystem/Theme.swift
+│   ├── Models/
+│   │   ├── AuthModels.swift
+│   │   └── RideModels.swift
+│   ├── Services/LocalFirebaseServices.swift
+│   └── Session/AppSession.swift
+└── Features/
+    ├── Auth/AuthViews.swift
+    ├── Messages/MessagesView.swift
+    ├── Navigation/RootView.swift
+    ├── Profile/ProfileView.swift
+    └── Rides/
+        ├── PublishTripView.swift
+        ├── RideCard.swift
+        ├── RideDetailView.swift
+        └── SearchView.swift
 ```
 
-The parallel `App/`, `Models/`, `Services/`, `ViewModels/`, and `Views/` folders are an inactive scaffold and are not part of the current Xcode target. Architecture cleanup is tracked in `Plan.md`; do not add new functionality to both structures.
+There is one active implementation of each screen and service. Add new shared infrastructure under `Core`, and keep feature-specific views and behavior inside the matching `Features` folder.
 
 ## Run Locally
 

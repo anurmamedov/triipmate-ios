@@ -8,7 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		8A0000010000000000000001 /* TriipMateApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A0000010000000000000011 /* TriipMateApp.swift */; };
-		8A0000010000000000000002 /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A0000010000000000000012 /* Models.swift */; };
+		8A0000010000000000000002 /* RideModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A0000010000000000000012 /* RideModels.swift */; };
 		8A0000010000000000000003 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A0000010000000000000013 /* RootView.swift */; };
 		8A0000010000000000000004 /* SearchView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A0000010000000000000014 /* SearchView.swift */; };
 		8A0000010000000000000005 /* RideCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A0000010000000000000015 /* RideCard.swift */; };
@@ -18,14 +18,16 @@
 		8A0000010000000000000009 /* ProfileView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A0000010000000000000019 /* ProfileView.swift */; };
 		8A000001000000000000000A /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A000001000000000000001A /* Theme.swift */; };
 		8A000001000000000000000B /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 8A000001000000000000001B /* Assets.xcassets */; };
-		8A000001000000000000000C /* Preview Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 8A000001000000000000001D /* Preview Assets.xcassets */; };
 		8A000001000000000000000D /* AuthViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A000001000000000000001F /* AuthViews.swift */; };
+		8A000001000000000000000E /* AuthModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A0000010000000000000021 /* AuthModels.swift */; };
+		8A000001000000000000000F /* AppSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A0000010000000000000022 /* AppSession.swift */; };
+		8A0000010000000000000023 /* LocalFirebaseServices.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A0000010000000000000024 /* LocalFirebaseServices.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
 		8A0000010000000000000010 /* TriipMate.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = TriipMate.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		8A0000010000000000000011 /* TriipMateApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TriipMateApp.swift; sourceTree = "<group>"; };
-		8A0000010000000000000012 /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
+		8A0000010000000000000012 /* RideModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RideModels.swift; sourceTree = "<group>"; };
 		8A0000010000000000000013 /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
 		8A0000010000000000000014 /* SearchView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchView.swift; sourceTree = "<group>"; };
 		8A0000010000000000000015 /* RideCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RideCard.swift; sourceTree = "<group>"; };
@@ -36,9 +38,11 @@
 		8A000001000000000000001A /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
 		8A000001000000000000001B /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		8A000001000000000000001C /* Preview Content */ = {isa = PBXFileReference; lastKnownFileType = folder; path = "Preview Content"; sourceTree = "<group>"; };
-		8A000001000000000000001D /* Preview Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = "Preview Assets.xcassets"; sourceTree = "<group>"; };
 		8A000001000000000000001E /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		8A000001000000000000001F /* AuthViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthViews.swift; sourceTree = "<group>"; };
+		8A0000010000000000000021 /* AuthModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthModels.swift; sourceTree = "<group>"; };
+		8A0000010000000000000022 /* AppSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppSession.swift; sourceTree = "<group>"; };
+		8A0000010000000000000024 /* LocalFirebaseServices.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalFirebaseServices.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -63,22 +67,121 @@
 		8A0000010000000000000031 /* TriipMate */ = {
 			isa = PBXGroup;
 			children = (
-				8A0000010000000000000011 /* TriipMateApp.swift */,
-				8A000001000000000000001F /* AuthViews.swift */,
-				8A0000010000000000000012 /* Models.swift */,
-				8A0000010000000000000013 /* RootView.swift */,
-				8A0000010000000000000014 /* SearchView.swift */,
-				8A0000010000000000000015 /* RideCard.swift */,
-				8A0000010000000000000016 /* RideDetailView.swift */,
-				8A0000010000000000000017 /* PublishTripView.swift */,
-				8A0000010000000000000018 /* MessagesView.swift */,
-				8A0000010000000000000019 /* ProfileView.swift */,
-				8A000001000000000000001A /* Theme.swift */,
+				8A00000100000000000000A0 /* App */,
+				8A00000100000000000000A1 /* Core */,
+				8A00000100000000000000A2 /* Features */,
 				8A000001000000000000001B /* Assets.xcassets */,
 				8A000001000000000000001E /* Info.plist */,
 				8A000001000000000000001C /* Preview Content */,
 			);
 			path = TriipMate;
+			sourceTree = "<group>";
+		};
+		8A00000100000000000000A0 /* App */ = {
+			isa = PBXGroup;
+			children = (
+				8A0000010000000000000011 /* TriipMateApp.swift */,
+			);
+			path = App;
+			sourceTree = "<group>";
+		};
+		8A00000100000000000000A1 /* Core */ = {
+			isa = PBXGroup;
+			children = (
+				8A00000100000000000000A3 /* Models */,
+				8A00000100000000000000A4 /* Services */,
+				8A00000100000000000000A5 /* Session */,
+				8A00000100000000000000A6 /* DesignSystem */,
+			);
+			path = Core;
+			sourceTree = "<group>";
+		};
+		8A00000100000000000000A2 /* Features */ = {
+			isa = PBXGroup;
+			children = (
+				8A00000100000000000000A7 /* Auth */,
+				8A00000100000000000000A8 /* Navigation */,
+				8A00000100000000000000A9 /* Rides */,
+				8A00000100000000000000AA /* Messages */,
+				8A00000100000000000000AB /* Profile */,
+			);
+			path = Features;
+			sourceTree = "<group>";
+		};
+		8A00000100000000000000A3 /* Models */ = {
+			isa = PBXGroup;
+			children = (
+				8A0000010000000000000021 /* AuthModels.swift */,
+				8A0000010000000000000012 /* RideModels.swift */,
+			);
+			path = Models;
+			sourceTree = "<group>";
+		};
+		8A00000100000000000000A4 /* Services */ = {
+			isa = PBXGroup;
+			children = (
+				8A0000010000000000000024 /* LocalFirebaseServices.swift */,
+			);
+			path = Services;
+			sourceTree = "<group>";
+		};
+		8A00000100000000000000A5 /* Session */ = {
+			isa = PBXGroup;
+			children = (
+				8A0000010000000000000022 /* AppSession.swift */,
+			);
+			path = Session;
+			sourceTree = "<group>";
+		};
+		8A00000100000000000000A6 /* DesignSystem */ = {
+			isa = PBXGroup;
+			children = (
+				8A000001000000000000001A /* Theme.swift */,
+			);
+			path = DesignSystem;
+			sourceTree = "<group>";
+		};
+		8A00000100000000000000A7 /* Auth */ = {
+			isa = PBXGroup;
+			children = (
+				8A000001000000000000001F /* AuthViews.swift */,
+			);
+			path = Auth;
+			sourceTree = "<group>";
+		};
+		8A00000100000000000000A8 /* Navigation */ = {
+			isa = PBXGroup;
+			children = (
+				8A0000010000000000000013 /* RootView.swift */,
+			);
+			path = Navigation;
+			sourceTree = "<group>";
+		};
+		8A00000100000000000000A9 /* Rides */ = {
+			isa = PBXGroup;
+			children = (
+				8A0000010000000000000014 /* SearchView.swift */,
+				8A0000010000000000000015 /* RideCard.swift */,
+				8A0000010000000000000016 /* RideDetailView.swift */,
+				8A0000010000000000000017 /* PublishTripView.swift */,
+			);
+			path = Rides;
+			sourceTree = "<group>";
+		};
+		8A00000100000000000000AA /* Messages */ = {
+			isa = PBXGroup;
+			children = (
+				8A0000010000000000000018 /* MessagesView.swift */,
+			);
+			path = Messages;
+			sourceTree = "<group>";
+		};
+		8A00000100000000000000AB /* Profile */ = {
+			isa = PBXGroup;
+			children = (
+				8A0000010000000000000019 /* ProfileView.swift */,
+			);
+			path = Profile;
 			sourceTree = "<group>";
 		};
 		8A0000010000000000000032 /* Products */ = {
@@ -148,7 +251,6 @@
 			buildActionMask = 2147483647;
 			files = (
 				8A000001000000000000000B /* Assets.xcassets in Resources */,
-				8A000001000000000000000C /* Preview Assets.xcassets in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -160,7 +262,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				8A0000010000000000000001 /* TriipMateApp.swift in Sources */,
-				8A0000010000000000000002 /* Models.swift in Sources */,
+				8A0000010000000000000002 /* RideModels.swift in Sources */,
 				8A0000010000000000000003 /* RootView.swift in Sources */,
 				8A0000010000000000000004 /* SearchView.swift in Sources */,
 				8A0000010000000000000005 /* RideCard.swift in Sources */,
@@ -170,6 +272,9 @@
 				8A0000010000000000000009 /* ProfileView.swift in Sources */,
 				8A000001000000000000000A /* Theme.swift in Sources */,
 				8A000001000000000000000D /* AuthViews.swift in Sources */,
+				8A000001000000000000000E /* AuthModels.swift in Sources */,
+				8A000001000000000000000F /* AppSession.swift in Sources */,
+				8A0000010000000000000023 /* LocalFirebaseServices.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

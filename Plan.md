@@ -1,6 +1,6 @@
 # TriipMate Development Plan
 
-This plan reflects the active Xcode target as of July 2026. Only the flat Swift files directly under `TriipMate/` are currently compiled. The parallel `App/`, `Services/`, `ViewModels/`, and `Views/` source tree is inactive and must not be counted as implemented functionality.
+This plan reflects the active Xcode target as of July 2026. The project now uses one feature-based source tree, with shared models, services, session state, and design tokens under `Core`.
 
 ## Status Legend
 
@@ -8,12 +8,12 @@ This plan reflects the active Xcode target as of July 2026. Only the flat Swift 
 - `[~]` Partially complete
 - `[ ]` Not started
 
-## 1. Clean Project Architecture `[ ]`
+## 1. Clean Project Architecture `[x]`
 
-- Choose one active folder structure.
-- Remove or archive duplicate inactive Swift files.
-- Separate models, services, views, and session state.
-- Update `README.md` and remove obsolete integration instructions.
+- Chose one active `App` / `Core` / `Features` folder structure.
+- Removed duplicate inactive Swift files and stale Xcode references.
+- Separated models, Firebase services, app session state, design tokens, and feature views.
+- Updated `README.md` to document the active source tree and local workflow.
 
 **Done when:** the Xcode target contains one implementation of each screen and service, and every source file has a clear purpose.
 
