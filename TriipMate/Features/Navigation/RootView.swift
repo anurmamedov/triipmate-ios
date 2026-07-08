@@ -35,7 +35,9 @@ struct RootView: View {
             .tint(.tmGreen)
             .animation(.easeInOut(duration: 0.28), value: session.activeRole)
             .onChange(of: session.activeRole) { _ in
-                selectedTab = .home
+                if selectedTab != .profile {
+                    selectedTab = .home
+                }
             }
         } else {
             AuthRootView()
@@ -173,14 +175,19 @@ private struct MainTabBar: View {
 }
 
 struct RoleSwitchHeader: View {
-    @Binding var activeRole: AppRole
+    @EnvironmentObject private var session: AppSession
+    @State private var isShowingRoleError = false
+
+    private var activeRole: AppRole { session.activeRole }
 
     var body: some View {
         HStack {
             Spacer()
             Button {
-                withAnimation(.spring(response: 0.5, dampingFraction: 0.85)) {
-                    activeRole = activeRole == .passenger ? .driver : .passenger
+                Task {
+                    let nextRole: AppRole = activeRole == .passenger ? .driver : .passenger
+                    await session.updateRole(nextRole)
+                    isShowingRoleError = session.profileError != nil
                 }
             } label: {
                 ZStack(alignment: activeRole == .passenger ? .leading : .trailing) {
@@ -206,13 +213,25 @@ struct RoleSwitchHeader: View {
                             .frame(width: 44, height: 36)
                     }
                     .font(.subheadline.weight(.semibold))
+                    .opacity(session.isRoleUpdating ? 0.35 : 1)
+
+                    if session.isRoleUpdating {
+                        ProgressView()
+                            .tint(Color.tmGreen)
+                    }
                 }
                 .frame(width: 88, height: 36)
                 .animation(.spring(response: 0.38, dampingFraction: 0.86), value: activeRole)
             }
             .buttonStyle(.plain)
+            .disabled(session.isRoleUpdating)
             .accessibilityLabel("Switch travel mode")
             .accessibilityValue(activeRole.title)
+            .alert("Could not change mode", isPresented: $isShowingRoleError) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text(session.profileError ?? "Try again when the local Firebase server is available.")
+            }
         }
         .frame(height: 48)
         .padding(.horizontal, 20)
@@ -242,7 +261,7 @@ struct DriverDashboardView: View {
             }
             .background(Color.tmMist.ignoresSafeArea())
             .safeAreaInset(edge: .top, spacing: 0) {
-                RoleSwitchHeader(activeRole: $session.activeRole)
+                RoleSwitchHeader()
             }
         }
     }
@@ -336,7 +355,7 @@ struct PassengerTripsView: View {
             }
             .background(Color.tmMist.ignoresSafeArea())
             .safeAreaInset(edge: .top, spacing: 0) {
-                RoleSwitchHeader(activeRole: $session.activeRole)
+                RoleSwitchHeader()
             }
         }
     }
@@ -379,7 +398,7 @@ struct PostedTripsView: View {
             }
             .background(Color.tmMist.ignoresSafeArea())
             .safeAreaInset(edge: .top, spacing: 0) {
-                RoleSwitchHeader(activeRole: $session.activeRole)
+                RoleSwitchHeader()
             }
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {

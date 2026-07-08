@@ -15,6 +15,70 @@ struct UserProfile {
     let phone: String
     let role: AppRole
     let profilePhotoPath: String?
+    let ratingAverage: Double?
+    let ratingCount: Int
+    let completedTripCount: Int
+    let totalSavingsCents: Int
+    let isIdentityVerified: Bool
+    let isDriverVerified: Bool
+
+    init(
+        uid: String,
+        firstName: String,
+        lastName: String,
+        email: String,
+        phone: String,
+        role: AppRole,
+        profilePhotoPath: String?,
+        ratingAverage: Double? = nil,
+        ratingCount: Int = 0,
+        completedTripCount: Int = 0,
+        totalSavingsCents: Int = 0,
+        isIdentityVerified: Bool = false,
+        isDriverVerified: Bool = false
+    ) {
+        self.uid = uid
+        self.firstName = firstName
+        self.lastName = lastName
+        self.email = email
+        self.phone = phone
+        self.role = role
+        self.profilePhotoPath = profilePhotoPath
+        self.ratingAverage = ratingAverage
+        self.ratingCount = ratingCount
+        self.completedTripCount = completedTripCount
+        self.totalSavingsCents = totalSavingsCents
+        self.isIdentityVerified = isIdentityVerified
+        self.isDriverVerified = isDriverVerified
+    }
+}
+
+extension UserProfile {
+    func updated(
+        firstName: String? = nil,
+        lastName: String? = nil,
+        email: String? = nil,
+        phone: String? = nil,
+        role: AppRole? = nil,
+        profilePhotoPath: String? = nil,
+        replacesProfilePhotoPath: Bool = false
+    ) -> UserProfile {
+        UserProfile(
+            uid: uid,
+            firstName: firstName ?? self.firstName,
+            lastName: lastName ?? self.lastName,
+            email: email ?? self.email,
+            phone: phone ?? self.phone,
+            role: role ?? self.role,
+            profilePhotoPath: replacesProfilePhotoPath ? profilePhotoPath : self.profilePhotoPath,
+            ratingAverage: ratingAverage,
+            ratingCount: ratingCount,
+            completedTripCount: completedTripCount,
+            totalSavingsCents: totalSavingsCents,
+            isIdentityVerified: isIdentityVerified,
+            isDriverVerified: isDriverVerified
+        )
+    }
 }
 
 struct SavedVehicle: Identifiable, Hashable {
@@ -39,7 +103,7 @@ enum LocalAuthError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .invalidResponse:
-            return "The auth emulator returned an unexpected response."
+            return "The local Firebase emulator returned an unexpected response."
         case .server(let message):
             return message
         case .profileNotFound:

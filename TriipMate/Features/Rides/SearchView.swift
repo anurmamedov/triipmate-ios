@@ -22,7 +22,7 @@ struct SearchView: View {
             }
             .background(Color.tmMist.ignoresSafeArea())
             .safeAreaInset(edge: .top, spacing: 0) {
-                RoleSwitchHeader(activeRole: $session.activeRole)
+                RoleSwitchHeader()
             }
             .task {
                 await session.loadSearchableRides()

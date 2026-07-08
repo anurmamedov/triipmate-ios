@@ -53,7 +53,7 @@ struct MessagesView: View {
                 }
             }
             .safeAreaInset(edge: .top, spacing: 0) {
-                RoleSwitchHeader(activeRole: $session.activeRole)
+                RoleSwitchHeader()
             }
         }
     }

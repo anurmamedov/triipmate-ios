@@ -36,12 +36,13 @@ This plan reflects the active Xcode target as of July 2026. The project now uses
 
 **Done when:** the complete authentication lifecycle behaves predictably against the local Auth emulator.
 
-## 4. Complete User Profiles `[~]`
+## 4. Complete User Profiles `[x]`
 
-- Persist personal information and profile photos.
-- Save passenger/driver mode changes to Firestore.
-- Replace hard-coded rating, trip, and savings values.
-- Add loading, empty, retry, and offline states.
+- Persist personal information and profile photos through Firestore and Storage.
+- Save passenger/driver mode changes to Firestore before updating the app mode.
+- Load rating, completed-trip, savings, and verification values from profile data instead of samples.
+- Added loading, empty, retry, cached-profile, and offline/error states.
+- Added a disposable-user emulator test for profile fields, role changes, photos, access rules, and cleanup.
 
 **Done when:** no visible profile value is hard-coded and all user data reloads correctly after logout and login.
 

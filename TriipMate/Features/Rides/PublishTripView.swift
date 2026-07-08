@@ -116,7 +116,7 @@ struct PublishTripView: View {
                 }
             }
             .safeAreaInset(edge: .top, spacing: 0) {
-                RoleSwitchHeader(activeRole: $session.activeRole)
+                RoleSwitchHeader()
             }
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 publishAction

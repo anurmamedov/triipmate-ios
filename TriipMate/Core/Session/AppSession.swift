@@ -16,6 +16,9 @@ final class AppSession: ObservableObject {
     @Published var isAuthWorking = false
     @Published var isProfileWorking = false
     @Published var isProfilePhotoWorking = false
+    @Published var isProfileLoading = false
+    @Published var isRoleUpdating = false
+    @Published var profileError: String?
     @Published var isVehicleWorking = false
     @Published var isRidePublishing = false
     @Published var isDriverRidesLoading = false
@@ -92,6 +95,7 @@ final class AppSession: ObservableObject {
         isAuthenticated = false
         authError = nil
         authNotice = nil
+        profileError = nil
     }
 
     func sendPasswordReset(email: String) async -> Bool {
@@ -118,42 +122,37 @@ final class AppSession: ObservableObject {
 
     func updateProfilePhoto(_ imageData: Data) async {
         guard let authUser, let userProfile else {
-            authError = "Please log in before adding a profile photo."
+            profileError = "Please log in before adding a profile photo."
             return
         }
 
         isProfilePhotoWorking = true
-        authError = nil
+        profileError = nil
         defer { isProfilePhotoWorking = false }
 
         do {
             let path = "profilePhotos/\(authUser.uid).jpg"
             try await storageService.upload(imageData: imageData, path: path, idToken: authUser.idToken)
-            let updatedProfile = UserProfile(
-                uid: userProfile.uid,
-                firstName: userProfile.firstName,
-                lastName: userProfile.lastName,
-                email: userProfile.email,
-                phone: userProfile.phone,
-                role: userProfile.role,
-                profilePhotoPath: path
+            let updatedProfile = userProfile.updated(
+                profilePhotoPath: path,
+                replacesProfilePhotoPath: true
             )
             try await profileService.save(updatedProfile, idToken: authUser.idToken)
             self.userProfile = updatedProfile
             self.profileImageData = imageData
         } catch {
-            authError = error.localizedDescription
+            profileError = error.localizedDescription
         }
     }
 
     func updateProfile(firstName: String, lastName: String, email: String, phone: String) async {
         guard let currentAuthUser = authUser, let currentProfile = userProfile else {
-            authError = "Please log in before editing your profile."
+            profileError = "Please log in before editing your profile."
             return
         }
 
         isProfileWorking = true
-        authError = nil
+        profileError = nil
         defer { isProfileWorking = false }
 
         do {
@@ -173,21 +172,66 @@ final class AppSession: ObservableObject {
                 )
             }
 
-            let updatedProfile = UserProfile(
-                uid: currentProfile.uid,
+            let updatedProfile = currentProfile.updated(
                 firstName: values.firstName,
                 lastName: values.lastName,
                 email: values.email,
-                phone: values.phone,
-                role: currentProfile.role,
-                profilePhotoPath: currentProfile.profilePhotoPath
+                phone: values.phone
             )
             try await profileService.save(updatedProfile, idToken: updatedAuthUser.idToken)
             try sessionStore.save(refreshToken: updatedAuthUser.refreshToken)
             authUser = updatedAuthUser
             userProfile = updatedProfile
         } catch {
-            authError = error.localizedDescription
+            profileError = error.localizedDescription
+        }
+    }
+
+    func updateRole(_ role: AppRole) async {
+        guard role != activeRole else { return }
+        guard let authUser, let currentProfile = userProfile else {
+            profileError = "Please log in before changing travel mode."
+            return
+        }
+
+        isRoleUpdating = true
+        profileError = nil
+        defer { isRoleUpdating = false }
+
+        do {
+            let updatedProfile = currentProfile.updated(role: role)
+            try await profileService.save(updatedProfile, idToken: authUser.idToken)
+            userProfile = updatedProfile
+            activeRole = role
+        } catch {
+            profileError = error.localizedDescription
+        }
+    }
+
+    func refreshProfile() async {
+        guard let authUser else {
+            profileError = "Please log in before loading your profile."
+            return
+        }
+
+        isProfileLoading = true
+        profileError = nil
+        defer { isProfileLoading = false }
+
+        do {
+            let profile = try await profileService.fetch(uid: authUser.uid, idToken: authUser.idToken)
+            userProfile = profile
+            activeRole = profile.role
+            profileImageData = nil
+            if let path = profile.profilePhotoPath {
+                do {
+                    profileImageData = try await storageService.download(path: path, idToken: authUser.idToken)
+                } catch {
+                    profileError = "Your profile loaded, but the photo is temporarily unavailable."
+                }
+            }
+        } catch {
+            profileError = error.localizedDescription
         }
     }
 
@@ -387,10 +431,15 @@ final class AppSession: ObservableObject {
     private func applyAuthenticatedUser(_ authUser: AuthUser, profile: UserProfile) async {
         self.authUser = authUser
         userProfile = profile
+        profileError = nil
         activeRole = profile.role
         profileImageData = nil
         if let path = profile.profilePhotoPath {
-            profileImageData = try? await storageService.download(path: path, idToken: authUser.idToken)
+            do {
+                profileImageData = try await storageService.download(path: path, idToken: authUser.idToken)
+            } catch {
+                profileError = "Your profile loaded, but the photo is temporarily unavailable."
+            }
         }
         savedVehicles = (try? await vehicleService.fetchAll(uid: authUser.uid, idToken: authUser.idToken)) ?? []
         driverRides = (try? await rideService.fetchDriverRides(uid: authUser.uid, idToken: authUser.idToken)) ?? []

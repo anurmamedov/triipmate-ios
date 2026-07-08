@@ -272,6 +272,12 @@ private struct FirestoreUserFields: Codable {
     let phone: FirestoreStringValue
     let role: FirestoreStringValue
     let profilePhotoPath: FirestoreStringValue?
+    let ratingAverage: FirestoreDoubleValue?
+    let ratingCount: FirestoreIntegerValue?
+    let completedTripCount: FirestoreIntegerValue?
+    let totalSavingsCents: FirestoreIntegerValue?
+    let isIdentityVerified: FirestoreBooleanValue?
+    let isDriverVerified: FirestoreBooleanValue?
     let updatedAt: FirestoreStringValue?
 
     init(profile: UserProfile) {
@@ -281,6 +287,12 @@ private struct FirestoreUserFields: Codable {
         phone = FirestoreStringValue(stringValue: profile.phone)
         role = FirestoreStringValue(stringValue: profile.role.rawValue)
         profilePhotoPath = profile.profilePhotoPath.map(FirestoreStringValue.init(stringValue:))
+        ratingAverage = profile.ratingAverage.map(FirestoreDoubleValue.init(doubleValue:))
+        ratingCount = FirestoreIntegerValue(integerValue: String(profile.ratingCount))
+        completedTripCount = FirestoreIntegerValue(integerValue: String(profile.completedTripCount))
+        totalSavingsCents = FirestoreIntegerValue(integerValue: String(profile.totalSavingsCents))
+        isIdentityVerified = FirestoreBooleanValue(booleanValue: profile.isIdentityVerified)
+        isDriverVerified = FirestoreBooleanValue(booleanValue: profile.isDriverVerified)
         updatedAt = FirestoreStringValue(stringValue: ISO8601DateFormatter().string(from: Date()))
     }
 
@@ -292,13 +304,31 @@ private struct FirestoreUserFields: Codable {
             email: email.stringValue,
             phone: phone.stringValue,
             role: AppRole(rawValue: role.stringValue) ?? .passenger,
-            profilePhotoPath: profilePhotoPath?.stringValue
+            profilePhotoPath: profilePhotoPath?.stringValue,
+            ratingAverage: ratingAverage?.doubleValue,
+            ratingCount: Int(ratingCount?.integerValue ?? "") ?? 0,
+            completedTripCount: Int(completedTripCount?.integerValue ?? "") ?? 0,
+            totalSavingsCents: Int(totalSavingsCents?.integerValue ?? "") ?? 0,
+            isIdentityVerified: isIdentityVerified?.booleanValue ?? false,
+            isDriverVerified: isDriverVerified?.booleanValue ?? false
         )
     }
 }
 
 private struct FirestoreStringValue: Codable {
     let stringValue: String
+}
+
+private struct FirestoreDoubleValue: Codable {
+    let doubleValue: Double
+}
+
+private struct FirestoreIntegerValue: Codable {
+    let integerValue: String
+}
+
+private struct FirestoreBooleanValue: Codable {
+    let booleanValue: Bool
 }
 
 private struct FirestoreRideDocument: Encodable {

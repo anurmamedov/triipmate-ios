@@ -83,10 +83,46 @@ struct ProfileView: View {
         return initials(from: fullName.isEmpty ? profile.email : fullName)
     }
 
+    private var verificationLabel: String {
+        guard let profile = session.userProfile else { return "Verification unavailable" }
+        if session.activeRole == .driver {
+            return profile.isDriverVerified ? "Verified driver" : "Driver verification pending"
+        }
+        return profile.isIdentityVerified ? "Verified traveler" : "Identity not verified"
+    }
+
+    private var verificationIcon: String {
+        guard let profile = session.userProfile else { return "questionmark.circle.fill" }
+        let isVerified = session.activeRole == .driver ? profile.isDriverVerified : profile.isIdentityVerified
+        return isVerified ? "checkmark.seal.fill" : "clock.badge.exclamationmark.fill"
+    }
+
+    private var ratingValue: String {
+        guard let rating = session.userProfile?.ratingAverage else { return "New" }
+        return rating.formatted(.number.precision(.fractionLength(1)))
+    }
+
+    private var tripValue: String {
+        String(session.userProfile?.completedTripCount ?? 0)
+    }
+
+    private var savingsValue: String {
+        let cents = session.userProfile?.totalSavingsCents ?? 0
+        return (Double(cents) / 100).formatted(
+            .currency(code: "USD").precision(.fractionLength(0))
+        )
+    }
+
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 20) {
+                    if let error = session.profileError {
+                        ProfileStatusBanner(message: error) {
+                            Task { await session.refreshProfile() }
+                        }
+                    }
+
                     VStack(spacing: 12) {
                         profilePhoto
                             .padding(.bottom, 10)
@@ -96,8 +132,8 @@ struct ProfileView: View {
                             .foregroundStyle(Color.tmInk)
 
                         Label(
-                            session.activeRole == .driver ? "Verified driver" : "Verified traveler",
-                            systemImage: "checkmark.seal.fill"
+                            verificationLabel,
+                            systemImage: verificationIcon
                         )
                             .foregroundStyle(Color.tmGreen)
                     }
@@ -107,9 +143,9 @@ struct ProfileView: View {
                     .clipShape(RoundedRectangle(cornerRadius: 8))
 
                     HStack(spacing: 12) {
-                        StatTile(value: "4.9", label: "Rating", icon: "star.fill")
-                        StatTile(value: "18", label: "Trips", icon: "car.fill", iconColor: .tmSlate)
-                        StatTile(value: "$1.2k", label: "Saved")
+                        StatTile(value: ratingValue, label: "Rating", icon: "star.fill")
+                        StatTile(value: tripValue, label: "Trips", icon: "car.fill", iconColor: .tmSlate)
+                        StatTile(value: savingsValue, label: "Saved")
                     }
 
                     VStack(alignment: .leading, spacing: 16) {
@@ -154,8 +190,18 @@ struct ProfileView: View {
                 .padding(20)
             }
             .background(Color.tmMist.ignoresSafeArea())
+            .overlay {
+                if session.userProfile == nil {
+                    ProfileUnavailableState(isLoading: session.isProfileLoading) {
+                        Task { await session.refreshProfile() }
+                    }
+                }
+            }
+            .refreshable {
+                await session.refreshProfile()
+            }
             .safeAreaInset(edge: .top, spacing: 0) {
-                RoleSwitchHeader(activeRole: $session.activeRole)
+                RoleSwitchHeader()
             }
             .alert("Log out?", isPresented: $isShowingLogoutConfirmation) {
                 Button("Cancel", role: .cancel) {}
@@ -170,6 +216,11 @@ struct ProfileView: View {
                     .environmentObject(session)
                     .presentationDetents([.large])
                     .presentationDragIndicator(.visible)
+            }
+            .task {
+                if session.userProfile == nil {
+                    await session.refreshProfile()
+                }
             }
         }
     }
@@ -492,7 +543,7 @@ struct EditProfileInformationView: View {
                     }
                 }
 
-                if let message = validationMessage ?? session.authError {
+                if let message = validationMessage ?? session.profileError {
                     Section {
                         Label(message, systemImage: "exclamationmark.triangle.fill")
                             .font(.footnote)
@@ -585,7 +636,7 @@ struct EditProfileInformationView: View {
         } else {
             phone = profile.phone
         }
-        session.authError = nil
+        session.profileError = nil
     }
 
     private func save() {
@@ -612,15 +663,80 @@ struct EditProfileInformationView: View {
                 email: cleanEmail,
                 phone: formattedPhone
             )
-            guard session.authError == nil else { return }
+            guard session.profileError == nil else { return }
 
             if let pendingPhotoData {
                 await session.updateProfilePhoto(pendingPhotoData)
             }
-            if session.authError == nil {
+            if session.profileError == nil {
                 dismiss()
             }
         }
+    }
+}
+
+private struct ProfileStatusBanner: View {
+    let message: String
+    let retry: () -> Void
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "wifi.slash")
+                .foregroundStyle(Color.tmAmber)
+            Text(message)
+                .font(.footnote.weight(.medium))
+                .foregroundStyle(Color.tmInk)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            Button(action: retry) {
+                Image(systemName: "arrow.clockwise")
+                    .font(.subheadline.weight(.bold))
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(Color.tmGreen)
+            .accessibilityLabel("Retry profile")
+        }
+        .padding(12)
+        .background(Color.tmAmber.opacity(0.12))
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+}
+
+private struct ProfileUnavailableState: View {
+    let isLoading: Bool
+    let retry: () -> Void
+
+    var body: some View {
+        VStack(spacing: 14) {
+            if isLoading {
+                ProgressView()
+                    .tint(Color.tmGreen)
+                Text("Loading your profile...")
+                    .foregroundStyle(Color.tmSlate)
+            } else {
+                Image(systemName: "person.crop.circle.badge.exclamationmark.fill")
+                    .font(.system(size: 42))
+                    .foregroundStyle(Color.tmSlate)
+                Text("Profile unavailable")
+                    .font(.headline)
+                    .foregroundStyle(Color.tmInk)
+                Text("Check the local Firebase server and try again.")
+                    .font(.subheadline)
+                    .foregroundStyle(Color.tmSlate)
+                    .multilineTextAlignment(.center)
+                Button(action: retry) {
+                    Label("Retry", systemImage: "arrow.clockwise")
+                        .font(.headline)
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 22)
+                        .padding(.vertical, 12)
+                        .background(Color.tmGreen)
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(28)
+        .background(Color.tmMist)
     }
 }
 

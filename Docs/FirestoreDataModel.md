@@ -26,7 +26,15 @@ Required fields:
 - `phone`
 - `role`
 - `profilePhotoPath`
+- `ratingAverage` (optional until the first rating)
+- `ratingCount`
+- `completedTripCount`
+- `totalSavingsCents`
+- `isIdentityVerified`
+- `isDriverVerified`
 - `updatedAt`
+
+Rating and trip/savings counters default to an unrated zero state. Later rating and completed-trip workflows are responsible for updating these persisted aggregate fields.
 
 Document ID:
 

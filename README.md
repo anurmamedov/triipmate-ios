@@ -108,6 +108,14 @@ With the emulators running, execute:
 
 The script uses a disposable account to verify registration, duplicate-email and invalid-password errors, token refresh, email updates, password reset, login, and cleanup. The iOS app stores only the Firebase refresh token in Keychain, restores the session at launch, and clears it on logout.
 
+Profile persistence can be verified separately with:
+
+```bash
+./scripts/test-profile-emulator.sh
+```
+
+This disposable-user test covers personal information, role changes, persisted statistics and verification fields, profile-photo upload/download, access rules, and cleanup.
+
 ### 2. Run the iOS app
 
 1. Open `TriipMate.xcodeproj`.
