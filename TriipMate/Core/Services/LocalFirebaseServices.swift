@@ -202,6 +202,38 @@ struct LocalFirestoreRideService {
             .sorted { $0.departureAt.date < $1.departureAt.date }
     }
 
+    func fetchSearchableRides(idToken: String) async throws -> [MarketplaceRide] {
+        var request = URLRequest(url: ridesURL)
+        request.setValue("Bearer \(idToken)", forHTTPHeaderField: "Authorization")
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw LocalAuthError.invalidResponse
+        }
+
+        if httpResponse.statusCode == 404 {
+            return []
+        }
+
+        guard (200..<300).contains(httpResponse.statusCode) else {
+            throw LocalAuthError.invalidResponse
+        }
+
+        let now = Date()
+        let collection = try JSONDecoder().decode(FirestoreRideCollection.self, from: data)
+        return (collection.documents ?? [])
+            .compactMap { $0.marketplaceRide }
+            .filter { [.published, .active].contains($0.status) }
+            .filter { $0.availableSeats > 0 }
+            .filter { $0.departureAt.date >= now }
+            .sorted {
+                if $0.departureAt.date == $1.departureAt.date {
+                    return $0.pricePerSeatCents < $1.pricePerSeatCents
+                }
+                return $0.departureAt.date < $1.departureAt.date
+            }
+    }
+
     func deleteRide(id: String, idToken: String) async throws {
         var request = URLRequest(url: ridesURL.appendingPathComponent(id))
         request.httpMethod = "DELETE"

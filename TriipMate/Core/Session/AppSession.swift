@@ -10,6 +10,7 @@ final class AppSession: ObservableObject {
     @Published var profileImageData: Data?
     @Published var savedVehicles: [SavedVehicle] = []
     @Published var driverRides: [MarketplaceRide] = []
+    @Published var searchableRides: [MarketplaceRide] = []
     @Published var authError: String?
     @Published var authNotice: String?
     @Published var isAuthWorking = false
@@ -19,6 +20,7 @@ final class AppSession: ObservableObject {
     @Published var isRidePublishing = false
     @Published var isDriverRidesLoading = false
     @Published var isDriverRideUpdating = false
+    @Published var isRideSearchLoading = false
 
     private let authService = LocalFirebaseAuthService()
     private let sessionStore = AuthSessionStore()
@@ -86,6 +88,7 @@ final class AppSession: ObservableObject {
         profileImageData = nil
         savedVehicles = []
         driverRides = []
+        searchableRides = []
         isAuthenticated = false
         authError = nil
         authNotice = nil
@@ -256,6 +259,23 @@ final class AppSession: ObservableObject {
 
         do {
             driverRides = try await rideService.fetchDriverRides(uid: authUser.uid, idToken: authUser.idToken)
+        } catch {
+            authError = error.localizedDescription
+        }
+    }
+
+    func loadSearchableRides() async {
+        guard let authUser else {
+            authError = "Please log in before searching rides."
+            return
+        }
+
+        isRideSearchLoading = true
+        authError = nil
+        defer { isRideSearchLoading = false }
+
+        do {
+            searchableRides = try await rideService.fetchSearchableRides(idToken: authUser.idToken)
         } catch {
             authError = error.localizedDescription
         }

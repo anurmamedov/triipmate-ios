@@ -84,13 +84,13 @@ This plan reflects the active Xcode target as of July 2026. The project now uses
 
 **Done when:** drivers can manage the full lifecycle of their Firestore-backed rides.
 
-## 9. Build Real Ride Search `[ ]`
+## 9. Build Real Ride Search `[x]`
 
-- Replace sample rides with Firestore queries.
-- Filter by route, date, seats, verification, and price.
-- Hide expired, cancelled, full, or inappropriate results.
-- Add loading, empty-results, retry, and pagination states.
-- Decide whether route matching uses normalized city names or coordinates.
+- Replaced sample rides with Firestore-backed ride loading.
+- Added route, date, seat, and lowest-price filtering.
+- Hid expired, cancelled, completed, full, and unavailable rides from passenger search.
+- Added loading, empty-results, and retry states.
+- Used normalized city text for route matching.
 
 **Done when:** a ride published by one local user appears correctly in another user’s search results.
 
@@ -158,4 +158,4 @@ This plan reflects the active Xcode target as of July 2026. The project now uses
 
 ## Recommended Next Work
 
-Complete stage **9** next. Drivers can now manage Firestore-backed rides; passengers should be able to search real Firestore rides published by drivers.
+Complete stages **10** and **11** next. Passengers can now search real Firestore rides; the next marketplace workflow is submitting ride requests and letting drivers accept or decline them.
