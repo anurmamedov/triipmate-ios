@@ -12,6 +12,7 @@ final class AppSession: ObservableObject {
     @Published var driverRides: [MarketplaceRide] = []
     @Published var searchableRides: [MarketplaceRide] = []
     @Published var passengerRideRequests: [JoinRideRequest] = []
+    @Published var passengerTrips: [PassengerTrip] = []
     @Published var driverRideRequests: [JoinRideRequest] = []
     @Published var authError: String?
     @Published var authNotice: String?
@@ -27,6 +28,7 @@ final class AppSession: ObservableObject {
     @Published var isDriverRideUpdating = false
     @Published var isRideSearchLoading = false
     @Published var isRideRequestWorking = false
+    @Published var isPassengerTripsLoading = false
     @Published var isDriverRequestsLoading = false
 
     private let authService = LocalFirebaseAuthService()
@@ -36,6 +38,7 @@ final class AppSession: ObservableObject {
     private let vehicleService = LocalFirestoreVehicleService()
     private let rideService = LocalFirestoreRideService()
     private let rideRequestService = LocalFirestoreRideRequestService()
+    private let passengerTripService = LocalFirestorePassengerTripService()
 
     init() {
         Task { await restoreSession() }
@@ -98,6 +101,7 @@ final class AppSession: ObservableObject {
         driverRides = []
         searchableRides = []
         passengerRideRequests = []
+        passengerTrips = []
         driverRideRequests = []
         isAuthenticated = false
         authError = nil
@@ -427,6 +431,7 @@ final class AppSession: ObservableObject {
 
         do {
             try await rideService.save(ride, idToken: authUser.idToken)
+            try await syncPassengerTrips(for: ride, idToken: authUser.idToken)
             replaceDriverRide(ride)
             return true
         } catch {
@@ -456,6 +461,10 @@ final class AppSession: ObservableObject {
         defer { isDriverRideUpdating = false }
 
         do {
+            let trips = try await passengerTripService.fetchRideTrips(rideId: ride.id, idToken: authUser.idToken)
+            for trip in trips where trip.status != .cancelled {
+                try await passengerTripService.save(trip.updated(status: .cancelled), idToken: authUser.idToken)
+            }
             try await rideService.deleteRide(id: ride.id, idToken: authUser.idToken)
             driverRides.removeAll { $0.id == ride.id }
             return true
@@ -542,6 +551,57 @@ final class AppSession: ObservableObject {
         }
     }
 
+    func loadPassengerTrips() async {
+        guard let authUser else {
+            authError = "Please log in before loading your trips."
+            return
+        }
+
+        isPassengerTripsLoading = true
+        authError = nil
+        defer { isPassengerTripsLoading = false }
+
+        do {
+            async let requests = rideRequestService.fetchPassengerRequests(uid: authUser.uid, idToken: authUser.idToken)
+            async let trips = passengerTripService.fetchPassengerTrips(uid: authUser.uid, idToken: authUser.idToken)
+            passengerRideRequests = try await requests
+            passengerTrips = try await trips
+        } catch {
+            authError = error.localizedDescription
+        }
+    }
+
+    func cancelPassengerRideRequest(_ request: JoinRideRequest) async -> Bool {
+        guard let authUser else {
+            authError = "Please log in before cancelling a request."
+            return false
+        }
+
+        guard request.passengerUid == authUser.uid else {
+            authError = "You can only cancel your own requests."
+            return false
+        }
+
+        guard request.status == .pending else {
+            authError = "Only pending requests can be cancelled."
+            return false
+        }
+
+        isRideRequestWorking = true
+        authError = nil
+        defer { isRideRequestWorking = false }
+
+        do {
+            let updatedRequest = request.updated(status: .cancelled)
+            try await rideRequestService.save(updatedRequest, idToken: authUser.idToken)
+            replacePassengerRequest(updatedRequest)
+            return true
+        } catch {
+            authError = error.localizedDescription
+            return false
+        }
+    }
+
     func loadDriverRideRequests() async {
         guard let authUser else {
             authError = "Please log in before loading passenger requests."
@@ -600,9 +660,22 @@ final class AppSession: ObservableObject {
                 availableSeats: remainingSeats
             )
             let updatedRequest = request.updated(status: .accepted)
+            let trip = PassengerTrip(
+                id: request.id,
+                requestId: request.id,
+                rideId: ride.id,
+                passengerUid: request.passengerUid,
+                driverUid: ride.driverUid,
+                seats: request.seatsRequested,
+                status: .accepted,
+                rideSnapshot: ride.snapshot,
+                createdAt: updatedRequest.decidedAt ?? FirestoreTimestamp(date: Date()),
+                updatedAt: updatedRequest.updatedAt
+            )
 
             try await rideService.save(updatedRide, idToken: authUser.idToken)
             try await rideRequestService.save(updatedRequest, idToken: authUser.idToken)
+            try await passengerTripService.save(trip, idToken: authUser.idToken)
             replaceDriverRide(updatedRide)
             replaceDriverRequest(updatedRequest)
             replaceSearchableRide(updatedRide)
@@ -703,8 +776,26 @@ final class AppSession: ObservableObject {
         savedVehicles = (try? await vehicleService.fetchAll(uid: authUser.uid, idToken: authUser.idToken)) ?? []
         driverRides = (try? await rideService.fetchDriverRides(uid: authUser.uid, idToken: authUser.idToken)) ?? []
         passengerRideRequests = (try? await rideRequestService.fetchPassengerRequests(uid: authUser.uid, idToken: authUser.idToken)) ?? []
+        passengerTrips = (try? await passengerTripService.fetchPassengerTrips(uid: authUser.uid, idToken: authUser.idToken)) ?? []
         driverRideRequests = (try? await rideRequestService.fetchDriverRequests(rideIds: Set(driverRides.map(\.id)), idToken: authUser.idToken)) ?? []
         isAuthenticated = true
+    }
+
+    private func replacePassengerRequest(_ request: JoinRideRequest) {
+        if let index = passengerRideRequests.firstIndex(where: { $0.id == request.id }) {
+            passengerRideRequests[index] = request
+        } else {
+            passengerRideRequests.append(request)
+        }
+        passengerRideRequests.sort { $0.createdAt.date > $1.createdAt.date }
+    }
+
+    private func syncPassengerTrips(for ride: MarketplaceRide, idToken: String) async throws {
+        guard let tripStatus = ride.status.passengerTripStatus else { return }
+        let trips = try await passengerTripService.fetchRideTrips(rideId: ride.id, idToken: idToken)
+        for trip in trips where trip.status != tripStatus {
+            try await passengerTripService.save(trip.updated(status: tripStatus), idToken: idToken)
+        }
     }
 
     private func replaceDriverRide(_ ride: MarketplaceRide) {
@@ -774,6 +865,20 @@ private extension SavedVehicle {
 }
 
 extension MarketplaceRide {
+    var snapshot: RideSnapshot {
+        RideSnapshot(
+            rideId: id,
+            driverUid: driverUid,
+            driverDisplayName: driverDisplayName,
+            from: from,
+            to: to,
+            departureAt: departureAt,
+            expectedArrivalAt: expectedArrivalAt,
+            pricePerSeatCents: pricePerSeatCents,
+            vehicle: vehicle
+        )
+    }
+
     func updated(
         status: RideStatus? = nil,
         availableSeats: Int? = nil,
@@ -823,5 +928,37 @@ extension JoinRideRequest {
             updatedAt: now,
             decidedAt: now
         )
+    }
+}
+
+extension PassengerTrip {
+    func updated(status: TripStatus) -> PassengerTrip {
+        PassengerTrip(
+            id: id,
+            requestId: requestId,
+            rideId: rideId,
+            passengerUid: passengerUid,
+            driverUid: driverUid,
+            seats: seats,
+            status: status,
+            rideSnapshot: rideSnapshot,
+            createdAt: createdAt,
+            updatedAt: FirestoreTimestamp(date: Date())
+        )
+    }
+}
+
+private extension RideStatus {
+    var passengerTripStatus: TripStatus? {
+        switch self {
+        case .active:
+            return .active
+        case .completed:
+            return .completed
+        case .cancelled:
+            return .cancelled
+        case .draft, .published, .full:
+            return nil
+        }
     }
 }

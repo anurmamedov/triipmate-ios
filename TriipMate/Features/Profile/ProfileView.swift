@@ -281,130 +281,52 @@ struct VehicleDetailsView: View {
     @State private var vehicleToDelete: SavedVehicle?
 
     var body: some View {
-        Form {
-            if !session.savedVehicles.isEmpty {
-                Section("Saved vehicles") {
-                    ForEach(session.savedVehicles) { vehicle in
-                        VStack(alignment: .leading, spacing: 12) {
-                            Button {
-                                load(vehicle)
-                            } label: {
-                                HStack(spacing: 12) {
-                                    Image(systemName: "car.fill")
-                                        .foregroundStyle(Color.tmGreen)
-                                        .frame(width: 28)
-                                    VStack(alignment: .leading, spacing: 3) {
-                                        HStack(spacing: 6) {
-                                            Text(vehicle.displayName)
-                                                .font(.body.weight(.semibold))
-                                                .foregroundStyle(Color.tmInk)
-                                            if vehicle.isDefault {
-                                                Label("Default", systemImage: "checkmark.seal.fill")
-                                                    .font(.caption2.weight(.semibold))
-                                                    .labelStyle(.titleAndIcon)
-                                                    .foregroundStyle(Color.tmGreen)
-                                            }
-                                        }
-                                        Text("\(vehicle.powerType) · \(vehicle.bodyType)")
-                                            .font(.caption)
-                                            .foregroundStyle(Color.tmSlate)
-                                    }
-                                    Spacer()
-                                    if editingVehicleID == vehicle.id {
-                                        Image(systemName: "checkmark.circle.fill")
-                                            .foregroundStyle(Color.tmGreen)
-                                    }
-                                }
-                            }
-                            .buttonStyle(.plain)
-
-                            HStack(spacing: 10) {
-                                Button {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 22) {
+                if !session.savedVehicles.isEmpty {
+                    vehicleSectionTitle("Saved vehicles")
+                    VStack(spacing: 12) {
+                        ForEach(session.savedVehicles) { vehicle in
+                            ProfileVehicleCard(
+                                vehicle: vehicle,
+                                isEditing: editingVehicleID == vehicle.id,
+                                isWorking: session.isVehicleWorking,
+                                onSelect: { load(vehicle) },
+                                onMakeDefault: {
                                     Task { await session.setDefaultVehicle(vehicle) }
-                                } label: {
-                                    Label(vehicle.isDefault ? "Default vehicle" : "Make default", systemImage: vehicle.isDefault ? "checkmark.circle.fill" : "circle")
-                                        .font(.caption.weight(.semibold))
-                                }
-                                .buttonStyle(.bordered)
-                                .tint(Color.tmGreen)
-                                .disabled(vehicle.isDefault || session.isVehicleWorking)
-
-                                Spacer()
-
-                                Button(role: .destructive) {
-                                    vehicleToDelete = vehicle
-                                } label: {
-                                    Label("Delete", systemImage: "trash")
-                                        .font(.caption.weight(.semibold))
-                                }
-                                .buttonStyle(.borderless)
-                                .disabled(session.isVehicleWorking)
-                            }
+                                },
+                                onDelete: { vehicleToDelete = vehicle }
+                            )
                         }
-                        .padding(.vertical, 4)
                     }
                 }
-            }
 
-            Section(editingVehicleID == nil ? "Add vehicle" : "Edit vehicle") {
-                TextField("Car make", text: $make)
-                    .textContentType(.organizationName)
-                TextField("Car model", text: $model)
-                TextField("Car year", text: $year)
-                    .keyboardType(.numberPad)
-                    .onChange(of: year) { value in
-                        year = String(value.filter { $0.isNumber }.prefix(4))
-                    }
-                Picker("Power type", selection: $powerType) {
-                    Text("Fuel").tag("Fuel")
-                    Text("Electric").tag("Electric")
-                    Text("Hybrid").tag("Hybrid")
-                }
-                Picker("Body type", selection: $bodyType) {
-                    Text("Sedan").tag("Sedan")
-                    Text("SUV").tag("SUV")
-                    Text("Van").tag("Van")
-                    Text("Truck").tag("Truck")
-                    Text("Hatchback").tag("Hatchback")
-                }
-            }
+                vehicleSectionTitle(editingVehicleID == nil ? "Add vehicle" : "Edit vehicle")
+                vehicleFormCard
 
-            if let message = validationMessage ?? session.authError {
-                Section {
-                    Label(message, systemImage: "exclamationmark.triangle.fill")
-                        .font(.footnote)
-                        .foregroundStyle(.red)
+                if let message = validationMessage ?? session.authError {
+                    VehicleNoticeCard(message: message)
                 }
             }
-
-            Section {
-                Button {
-                    save()
-                } label: {
-                    HStack {
-                        Spacer()
-                        if session.isVehicleWorking {
-                            ProgressView()
-                        } else {
-                            Label(editingVehicleID == nil ? "Save vehicle" : "Update vehicle", systemImage: "checkmark.circle.fill")
-                                .font(.headline)
-                        }
-                        Spacer()
-                    }
-                }
-                .disabled(session.isVehicleWorking)
-            }
+            .padding(20)
+            .padding(.bottom, 94)
         }
-        .scrollContentBackground(.hidden)
-        .background(Color.tmMist)
+        .background(Color.tmMist.ignoresSafeArea())
         .navigationTitle("Vehicle details")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             if editingVehicleID != nil {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button("Add New") { clearForm() }
+                    Button {
+                        clearForm()
+                    } label: {
+                        Label("Add New", systemImage: "plus.circle.fill")
+                    }
                 }
             }
+        }
+        .safeAreaInset(edge: .bottom) {
+            vehicleSaveBar
         }
         .alert(item: $vehicleToDelete) { vehicle in
             Alert(
@@ -421,6 +343,76 @@ struct VehicleDetailsView: View {
             )
         }
         .tint(Color.tmGreen)
+        .onAppear {
+            session.authError = nil
+        }
+    }
+
+    private func vehicleSectionTitle(_ title: String) -> some View {
+        Text(title)
+            .font(.headline)
+            .foregroundStyle(Color.tmInk)
+    }
+
+    private var vehicleFormCard: some View {
+        VStack(spacing: 12) {
+            VehicleProfileInput(title: "Make", placeholder: "Toyota", text: $make)
+                .textContentType(.organizationName)
+            VehicleProfileInput(title: "Model", placeholder: "Corolla", text: $model)
+            VehicleProfileInput(title: "Year", placeholder: "2022", text: $year, keyboardType: .numberPad)
+                .onChange(of: year) { value in
+                    year = String(value.filter { $0.isNumber }.prefix(4))
+                }
+
+            HStack(spacing: 10) {
+                VehicleProfileMenu(title: "Power", selection: $powerType, options: ["Fuel", "Electric", "Hybrid"], icon: "fuelpump.fill")
+                VehicleProfileMenu(title: "Body", selection: $bodyType, options: ["Sedan", "SUV", "Van", "Truck", "Hatchback"], icon: "rectangle.3.group.fill")
+            }
+        }
+        .padding(14)
+        .background(.white)
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .overlay {
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(Color.tmLine, lineWidth: 1)
+        }
+    }
+
+    private var vehicleSaveBar: some View {
+        Button {
+            save()
+        } label: {
+            if session.isVehicleWorking {
+                ProgressView()
+                    .tint(.white)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 52)
+            } else {
+                Label(editingVehicleID == nil ? "Save vehicle" : "Update vehicle", systemImage: "checkmark.circle.fill")
+                    .font(.headline)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 52)
+            }
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(.white)
+        .background(Color.tmGreen)
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .shadow(color: Color.tmGreen.opacity(0.18), radius: 10, y: 5)
+        .disabled(session.isVehicleWorking)
+        .padding(.horizontal, 20)
+        .padding(.top, 12)
+        .padding(.bottom, 10)
+        .background {
+            Rectangle()
+                .fill(Color.tmMist.opacity(0.96))
+                .ignoresSafeArea()
+                .overlay(alignment: .top) {
+                    Rectangle()
+                        .fill(Color.tmLine.opacity(0.8))
+                        .frame(height: 1)
+                }
+        }
     }
 
     private func load(_ vehicle: SavedVehicle) {
@@ -469,6 +461,173 @@ struct VehicleDetailsView: View {
                 load(vehicle)
             }
         }
+    }
+}
+
+private struct ProfileVehicleCard: View {
+    let vehicle: SavedVehicle
+    let isEditing: Bool
+    let isWorking: Bool
+    let onSelect: () -> Void
+    let onMakeDefault: () -> Void
+    let onDelete: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Button(action: onSelect) {
+                HStack(spacing: 12) {
+                    Image(systemName: "car.fill")
+                        .font(.headline)
+                        .foregroundStyle(isEditing ? .white : Color.tmGreen)
+                        .frame(width: 40, height: 40)
+                        .background(isEditing ? Color.tmGreen : Color.tmGreen.opacity(0.12))
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack(spacing: 6) {
+                            Text(vehicle.displayName)
+                                .font(.headline)
+                                .foregroundStyle(Color.tmInk)
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.82)
+                            if vehicle.isDefault {
+                                Image(systemName: "checkmark.seal.fill")
+                                    .font(.caption)
+                                    .foregroundStyle(Color.tmGreen)
+                            }
+                        }
+                        Text("\(vehicle.powerType) · \(vehicle.bodyType)")
+                            .font(.caption)
+                            .foregroundStyle(Color.tmSlate)
+                    }
+
+                    Spacer()
+
+                    if isEditing {
+                        Text("Editing")
+                            .font(.caption.weight(.bold))
+                            .foregroundStyle(Color.tmGreen)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 5)
+                            .background(Color.tmGreen.opacity(0.12))
+                            .clipShape(RoundedRectangle(cornerRadius: 6))
+                    }
+                }
+            }
+            .buttonStyle(.plain)
+
+            HStack(spacing: 10) {
+                Button(action: onMakeDefault) {
+                    Label(vehicle.isDefault ? "Default vehicle" : "Make default", systemImage: vehicle.isDefault ? "checkmark.circle.fill" : "circle")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(vehicle.isDefault ? Color.tmGreen : Color.tmInk)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 36)
+                        .background(vehicle.isDefault ? Color.tmGreen.opacity(0.12) : Color.tmCloud)
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                }
+                .buttonStyle(.plain)
+                .disabled(vehicle.isDefault || isWorking)
+
+                Button(action: onDelete) {
+                    Image(systemName: "trash.fill")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(Color.red)
+                        .frame(width: 44, height: 36)
+                        .background(Color.red.opacity(0.1))
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                }
+                .buttonStyle(.plain)
+                .disabled(isWorking)
+                .accessibilityLabel("Delete vehicle")
+            }
+        }
+        .padding(14)
+        .background(.white)
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .overlay {
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(isEditing ? Color.tmGreen.opacity(0.45) : Color.tmLine, lineWidth: 1)
+        }
+    }
+}
+
+private struct VehicleProfileInput: View {
+    let title: String
+    let placeholder: String
+    @Binding var text: String
+    var keyboardType: UIKeyboardType = .default
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text(title)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(Color.tmSlate)
+            TextField(placeholder, text: $text)
+                .font(.body.weight(.semibold))
+                .foregroundStyle(Color.tmInk)
+                .keyboardType(keyboardType)
+                .textInputAutocapitalization(.words)
+                .autocorrectionDisabled()
+        }
+        .padding(12)
+        .background(Color.tmMist)
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+}
+
+private struct VehicleProfileMenu: View {
+    let title: String
+    @Binding var selection: String
+    let options: [String]
+    let icon: String
+
+    var body: some View {
+        Menu {
+            ForEach(options, id: \.self) { option in
+                Button(option) {
+                    selection = option
+                }
+            }
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: icon)
+                    .foregroundStyle(Color.tmGreen)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title)
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(Color.tmSlate)
+                    Text(selection)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(Color.tmInk)
+                }
+                Spacer()
+                Image(systemName: "chevron.up.chevron.down")
+                    .font(.caption2.weight(.bold))
+                    .foregroundStyle(Color.tmSlate)
+            }
+            .padding(12)
+            .background(Color.tmMist)
+            .clipShape(RoundedRectangle(cornerRadius: 8))
+        }
+    }
+}
+
+private struct VehicleNoticeCard: View {
+    let message: String
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundStyle(.red)
+            Text(message)
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(.red)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(14)
+        .background(Color.red.opacity(0.08))
+        .clipShape(RoundedRectangle(cornerRadius: 8))
     }
 }
 

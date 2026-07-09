@@ -331,6 +331,64 @@ struct LocalFirestoreRideRequestService {
     }
 }
 
+struct LocalFirestorePassengerTripService {
+    private let projectId = "demo-triipmate-local"
+
+    private var tripsURL: URL {
+        URL(string: "http://127.0.0.1:8080/v1/projects/\(projectId)/databases/(default)/documents/trips")!
+    }
+
+    func save(_ trip: PassengerTrip, idToken: String) async throws {
+        var request = URLRequest(url: tripsURL.appendingPathComponent(trip.id))
+        request.httpMethod = "PATCH"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("Bearer \(idToken)", forHTTPHeaderField: "Authorization")
+        request.httpBody = try JSONEncoder().encode(FirestorePassengerTripDocument(trip: trip))
+
+        let (_, response) = try await URLSession.shared.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse,
+              (200..<300).contains(httpResponse.statusCode) else {
+            throw LocalAuthError.invalidResponse
+        }
+    }
+
+    func fetchPassengerTrips(uid: String, idToken: String) async throws -> [PassengerTrip] {
+        let trips = try await fetchAllTrips(idToken: idToken)
+        return trips
+            .filter { $0.passengerUid == uid }
+            .sorted { $0.createdAt.date > $1.createdAt.date }
+    }
+
+    func fetchRideTrips(rideId: String, idToken: String) async throws -> [PassengerTrip] {
+        let trips = try await fetchAllTrips(idToken: idToken)
+        return trips
+            .filter { $0.rideId == rideId }
+            .sorted { $0.createdAt.date > $1.createdAt.date }
+    }
+
+    private func fetchAllTrips(idToken: String) async throws -> [PassengerTrip] {
+        var request = URLRequest(url: tripsURL)
+        request.setValue("Bearer \(idToken)", forHTTPHeaderField: "Authorization")
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw LocalAuthError.invalidResponse
+        }
+
+        if httpResponse.statusCode == 404 {
+            return []
+        }
+
+        guard (200..<300).contains(httpResponse.statusCode) else {
+            throw LocalAuthError.invalidResponse
+        }
+
+        let collection = try JSONDecoder().decode(FirestorePassengerTripCollection.self, from: data)
+        return (collection.documents ?? [])
+            .compactMap { $0.passengerTrip }
+    }
+}
+
 private struct FirestoreVehicleDocument: Codable {
     let name: String?
     let fields: [String: FirestoreVehicleValue]
@@ -494,6 +552,24 @@ private struct FirestoreRideRequestDocument: Encodable {
     }
 }
 
+private struct FirestorePassengerTripDocument: Encodable {
+    let fields: [String: FirestoreRideValue]
+
+    init(trip: PassengerTrip) {
+        fields = [
+            "requestId": .string(trip.requestId),
+            "rideId": .string(trip.rideId),
+            "passengerUid": .string(trip.passengerUid),
+            "driverUid": .string(trip.driverUid),
+            "seats": .integer(trip.seats),
+            "status": .string(trip.status.rawValue),
+            "rideSnapshot": .map(trip.rideSnapshot.firestoreFields),
+            "createdAt": .timestamp(trip.createdAt.date),
+            "updatedAt": .timestamp(trip.updatedAt.date)
+        ]
+    }
+}
+
 private enum FirestoreRideValue: Encodable {
     case string(String)
     case integer(Int)
@@ -539,6 +615,10 @@ private struct FirestoreRideCollection: Decodable {
 
 private struct FirestoreRideRequestCollection: Decodable {
     let documents: [FirestoreDecodedRideRequestDocument]?
+}
+
+private struct FirestorePassengerTripCollection: Decodable {
+    let documents: [FirestoreDecodedPassengerTripDocument]?
 }
 
 private struct FirestoreDecodedRideDocument: Decodable {
@@ -629,6 +709,40 @@ private struct FirestoreDecodedRideRequestDocument: Decodable {
     }
 }
 
+private struct FirestoreDecodedPassengerTripDocument: Decodable {
+    let name: String?
+    let fields: [String: FirestoreDecodedValue]
+
+    var passengerTrip: PassengerTrip? {
+        let id = name?.split(separator: "/").last.map(String.init) ?? UUID().uuidString
+        guard let requestId = fields["requestId"]?.stringValue,
+              let rideId = fields["rideId"]?.stringValue,
+              let passengerUid = fields["passengerUid"]?.stringValue,
+              let driverUid = fields["driverUid"]?.stringValue,
+              let seats = fields["seats"]?.intValue,
+              let statusRawValue = fields["status"]?.stringValue,
+              let status = TripStatus(rawValue: statusRawValue),
+              let rideSnapshot = fields["rideSnapshot"]?.rideSnapshot,
+              let createdAt = fields["createdAt"]?.timestamp,
+              let updatedAt = fields["updatedAt"]?.timestamp else {
+            return nil
+        }
+
+        return PassengerTrip(
+            id: id,
+            requestId: requestId,
+            rideId: rideId,
+            passengerUid: passengerUid,
+            driverUid: driverUid,
+            seats: seats,
+            status: status,
+            rideSnapshot: rideSnapshot,
+            createdAt: createdAt,
+            updatedAt: updatedAt
+        )
+    }
+}
+
 private struct FirestoreDecodedValue: Decodable {
     let stringValue: String?
     let integerValue: String?
@@ -682,6 +796,32 @@ private struct FirestoreDecodedValue: Decodable {
         )
     }
 
+    var rideSnapshot: RideSnapshot? {
+        guard let fields = mapValue?.fields,
+              let rideId = fields["rideId"]?.stringValue,
+              let driverUid = fields["driverUid"]?.stringValue,
+              let driverDisplayName = fields["driverDisplayName"]?.stringValue,
+              let from = fields["from"]?.routeEndpoint,
+              let to = fields["to"]?.routeEndpoint,
+              let departureAt = fields["departureAt"]?.timestamp,
+              let pricePerSeatCents = fields["pricePerSeatCents"]?.intValue,
+              let vehicle = fields["vehicle"]?.vehicleSnapshot else {
+            return nil
+        }
+
+        return RideSnapshot(
+            rideId: rideId,
+            driverUid: driverUid,
+            driverDisplayName: driverDisplayName,
+            from: from,
+            to: to,
+            departureAt: departureAt,
+            expectedArrivalAt: fields["expectedArrivalAt"]?.timestamp,
+            pricePerSeatCents: pricePerSeatCents,
+            vehicle: vehicle
+        )
+    }
+
     private static func date(from timestamp: String) -> Date? {
         fractionalTimestampFormatter.date(from: timestamp) ?? wholeSecondTimestampFormatter.date(from: timestamp)
     }
@@ -726,6 +866,27 @@ private extension VehicleSnapshot {
 
         if let vehicleId {
             fields["vehicleId"] = .string(vehicleId)
+        }
+
+        return fields
+    }
+}
+
+private extension RideSnapshot {
+    var firestoreFields: [String: FirestoreRideValue] {
+        var fields: [String: FirestoreRideValue] = [
+            "rideId": .string(rideId),
+            "driverUid": .string(driverUid),
+            "driverDisplayName": .string(driverDisplayName),
+            "from": .map(from.firestoreFields),
+            "to": .map(to.firestoreFields),
+            "departureAt": .timestamp(departureAt.date),
+            "pricePerSeatCents": .integer(pricePerSeatCents),
+            "vehicle": .map(vehicle.firestoreFields)
+        ]
+
+        if let expectedArrivalAt {
+            fields["expectedArrivalAt"] = .timestamp(expectedArrivalAt.date)
         }
 
         return fields

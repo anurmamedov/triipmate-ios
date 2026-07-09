@@ -278,25 +278,141 @@ struct RouteField: View {
     let title: String
     @Binding var text: String
     let icon: String
+    @FocusState private var isFocused: Bool
+
+    private var suggestions: [NorthAmericaLocation] {
+        NorthAmericaLocation.suggestions(matching: text)
+    }
 
     var body: some View {
-        HStack(spacing: 12) {
-            Image(systemName: icon)
-                .foregroundStyle(Color.tmGreen)
-                .frame(width: 24)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title)
-                    .font(.caption)
-                    .foregroundStyle(Color.tmSlate)
-                TextField(title, text: $text)
-                    .font(.body.weight(.semibold))
-                    .foregroundStyle(Color.tmInk)
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 12) {
+                Image(systemName: icon)
+                    .foregroundStyle(Color.tmGreen)
+                    .frame(width: 24)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title)
+                        .font(.caption)
+                        .foregroundStyle(Color.tmSlate)
+                    TextField("City, state or province", text: $text)
+                        .font(.body.weight(.semibold))
+                        .foregroundStyle(Color.tmInk)
+                        .textInputAutocapitalization(.words)
+                        .autocorrectionDisabled()
+                        .focused($isFocused)
+                }
+            }
+
+            if isFocused && !suggestions.isEmpty {
+                VStack(spacing: 0) {
+                    ForEach(suggestions) { location in
+                        Button {
+                            text = location.displayName
+                            isFocused = false
+                        } label: {
+                            HStack(spacing: 10) {
+                                Image(systemName: "mappin.circle.fill")
+                                    .foregroundStyle(Color.tmGreen)
+                                    .frame(width: 22)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(location.displayName)
+                                        .font(.subheadline.weight(.semibold))
+                                        .foregroundStyle(Color.tmInk)
+                                    Text("\(location.regionName), \(location.country)")
+                                        .font(.caption)
+                                        .foregroundStyle(Color.tmSlate)
+                                }
+                                Spacer()
+                            }
+                            .padding(.vertical, 8)
+                        }
+                        .buttonStyle(.plain)
+
+                        if location.id != suggestions.last?.id {
+                            Divider()
+                                .padding(.leading, 32)
+                        }
+                    }
+                }
+                .padding(.top, 2)
             }
         }
         .padding(12)
         .background(.white)
         .clipShape(RoundedRectangle(cornerRadius: 8))
     }
+}
+
+struct NorthAmericaLocation: Identifiable, Hashable {
+    let city: String
+    let regionCode: String
+    let regionName: String
+    let country: String
+
+    var id: String { "\(city)-\(regionCode)-\(country)" }
+    var displayName: String { "\(city), \(regionCode)" }
+
+    static func suggestions(matching query: String) -> [NorthAmericaLocation] {
+        let normalizedQuery = query.normalizedSearchText
+        guard !normalizedQuery.isEmpty else { return [] }
+
+        let matches = locations.filter { location in
+            location.city.matchesAutocompletePrefix(normalizedQuery)
+                || location.displayName.matchesAutocompletePrefix(normalizedQuery)
+                || location.regionCode.matchesAutocompletePrefix(normalizedQuery)
+                || location.regionName.matchesAutocompletePrefix(normalizedQuery)
+        }
+
+        return Array(matches.prefix(3))
+    }
+
+    private static let locations: [NorthAmericaLocation] = [
+        .init(city: "Toronto", regionCode: "ON", regionName: "Ontario", country: "Canada"),
+        .init(city: "Montreal", regionCode: "QC", regionName: "Quebec", country: "Canada"),
+        .init(city: "Vancouver", regionCode: "BC", regionName: "British Columbia", country: "Canada"),
+        .init(city: "Calgary", regionCode: "AB", regionName: "Alberta", country: "Canada"),
+        .init(city: "Edmonton", regionCode: "AB", regionName: "Alberta", country: "Canada"),
+        .init(city: "Ottawa", regionCode: "ON", regionName: "Ontario", country: "Canada"),
+        .init(city: "Winnipeg", regionCode: "MB", regionName: "Manitoba", country: "Canada"),
+        .init(city: "Quebec City", regionCode: "QC", regionName: "Quebec", country: "Canada"),
+        .init(city: "Hamilton", regionCode: "ON", regionName: "Ontario", country: "Canada"),
+        .init(city: "Kitchener", regionCode: "ON", regionName: "Ontario", country: "Canada"),
+        .init(city: "London", regionCode: "ON", regionName: "Ontario", country: "Canada"),
+        .init(city: "Halifax", regionCode: "NS", regionName: "Nova Scotia", country: "Canada"),
+        .init(city: "Saskatoon", regionCode: "SK", regionName: "Saskatchewan", country: "Canada"),
+        .init(city: "Regina", regionCode: "SK", regionName: "Saskatchewan", country: "Canada"),
+        .init(city: "Victoria", regionCode: "BC", regionName: "British Columbia", country: "Canada"),
+        .init(city: "New York", regionCode: "NY", regionName: "New York", country: "United States"),
+        .init(city: "Los Angeles", regionCode: "CA", regionName: "California", country: "United States"),
+        .init(city: "Chicago", regionCode: "IL", regionName: "Illinois", country: "United States"),
+        .init(city: "Houston", regionCode: "TX", regionName: "Texas", country: "United States"),
+        .init(city: "Phoenix", regionCode: "AZ", regionName: "Arizona", country: "United States"),
+        .init(city: "Philadelphia", regionCode: "PA", regionName: "Pennsylvania", country: "United States"),
+        .init(city: "San Antonio", regionCode: "TX", regionName: "Texas", country: "United States"),
+        .init(city: "San Diego", regionCode: "CA", regionName: "California", country: "United States"),
+        .init(city: "Dallas", regionCode: "TX", regionName: "Texas", country: "United States"),
+        .init(city: "Austin", regionCode: "TX", regionName: "Texas", country: "United States"),
+        .init(city: "Jacksonville", regionCode: "FL", regionName: "Florida", country: "United States"),
+        .init(city: "San Jose", regionCode: "CA", regionName: "California", country: "United States"),
+        .init(city: "Fort Worth", regionCode: "TX", regionName: "Texas", country: "United States"),
+        .init(city: "Columbus", regionCode: "OH", regionName: "Ohio", country: "United States"),
+        .init(city: "Charlotte", regionCode: "NC", regionName: "North Carolina", country: "United States"),
+        .init(city: "San Francisco", regionCode: "CA", regionName: "California", country: "United States"),
+        .init(city: "Indianapolis", regionCode: "IN", regionName: "Indiana", country: "United States"),
+        .init(city: "Seattle", regionCode: "WA", regionName: "Washington", country: "United States"),
+        .init(city: "Denver", regionCode: "CO", regionName: "Colorado", country: "United States"),
+        .init(city: "Washington", regionCode: "DC", regionName: "District of Columbia", country: "United States"),
+        .init(city: "Boston", regionCode: "MA", regionName: "Massachusetts", country: "United States"),
+        .init(city: "Nashville", regionCode: "TN", regionName: "Tennessee", country: "United States"),
+        .init(city: "Detroit", regionCode: "MI", regionName: "Michigan", country: "United States"),
+        .init(city: "Pittsburgh", regionCode: "PA", regionName: "Pennsylvania", country: "United States"),
+        .init(city: "Cleveland", regionCode: "OH", regionName: "Ohio", country: "United States"),
+        .init(city: "Buffalo", regionCode: "NY", regionName: "New York", country: "United States"),
+        .init(city: "Minneapolis", regionCode: "MN", regionName: "Minnesota", country: "United States"),
+        .init(city: "Portland", regionCode: "OR", regionName: "Oregon", country: "United States"),
+        .init(city: "Miami", regionCode: "FL", regionName: "Florida", country: "United States"),
+        .init(city: "Atlanta", regionCode: "GA", regionName: "Georgia", country: "United States")
+    ]
 }
 
 private extension MarketplaceRide {
@@ -358,6 +474,15 @@ private extension String {
         folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
             .lowercased()
             .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    func matchesAutocompletePrefix(_ query: String) -> Bool {
+        let normalizedValue = normalizedSearchText
+        guard !query.isEmpty else { return false }
+        return normalizedValue.hasPrefix(query)
+            || normalizedValue
+                .split(separator: " ")
+                .contains { $0.hasPrefix(query) }
     }
 
     var initials: String {

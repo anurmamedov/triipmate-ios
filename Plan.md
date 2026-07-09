@@ -116,12 +116,13 @@ This plan reflects the active Xcode target as of July 2026. The project now uses
 
 **Done when:** driver decisions update both accounts consistently without seat-count errors.
 
-## 12. Build Passenger Trip Management `[~]`
+## 12. Build Passenger Trip Management `[x]`
 
-- Show pending, accepted, declined, active, completed, and cancelled trips.
+- Replaced sample My Trips content with Firestore-backed passenger requests and trips.
+- Show pending, accepted, declined, active, completed, and cancelled trip states.
 - Allow cancellation of eligible pending requests.
-- Preserve trip history and ride snapshots.
-- Replace all remaining sample trip data.
+- Create passenger trip documents with preserved ride snapshots when drivers accept requests.
+- Sync accepted passenger trips when driver rides become active, completed, cancelled, or deleted.
 
 **Done when:** passengers see an accurate Firestore-backed history and current trip state.
 
