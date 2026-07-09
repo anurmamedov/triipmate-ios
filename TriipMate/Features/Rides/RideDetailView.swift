@@ -1,7 +1,11 @@
 import SwiftUI
 
 struct RideDetailView: View {
+    @EnvironmentObject private var session: AppSession
     let ride: Ride
+    @State private var isRequestSheetPresented = false
+    @State private var isResultAlertPresented = false
+    @State private var requestResultMessage = ""
 
     var body: some View {
         ScrollView {
@@ -50,6 +54,7 @@ struct RideDetailView: View {
                 }
 
                 Button {
+                    isRequestSheetPresented = true
                 } label: {
                     Label("Request to join this ride", systemImage: "person.badge.plus.fill")
                         .font(.headline)
@@ -58,6 +63,7 @@ struct RideDetailView: View {
                 }
                 .buttonStyle(.borderedProminent)
                 .tint(Color.tmGreen)
+                .disabled(ride.seats <= 0 || session.isRideRequestWorking)
 
                 Button {
                 } label: {
@@ -74,6 +80,16 @@ struct RideDetailView: View {
         .background(Color.tmMist.ignoresSafeArea())
         .navigationTitle("Ride")
         .navigationBarTitleDisplayMode(.inline)
+        .sheet(isPresented: $isRequestSheetPresented) {
+            RideRequestFormView(ride: ride) { message in
+                requestResultMessage = message
+                isResultAlertPresented = true
+            }
+            .environmentObject(session)
+        }
+        .alert(requestResultMessage, isPresented: $isResultAlertPresented) {
+            Button("OK", role: .cancel) { }
+        }
     }
 
     private var topSummary: some View {
@@ -132,6 +148,80 @@ struct RideDetailView: View {
         .padding(16)
         .background(.white)
         .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+}
+
+struct RideRequestFormView: View {
+    @EnvironmentObject private var session: AppSession
+    @Environment(\.dismiss) private var dismiss
+    let ride: Ride
+    let onComplete: (String) -> Void
+    @State private var seatsRequested = 1
+    @State private var pickupNote = ""
+    @State private var dropoffNote = ""
+    @State private var luggageNote = ""
+    @State private var message = ""
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Ride") {
+                    LabeledContent("Route", value: "\(ride.from) to \(ride.to)")
+                    LabeledContent("Departure", value: "\(ride.date) at \(ride.time)")
+                    LabeledContent("Seat price", value: "$\(ride.price)")
+                }
+
+                Section("Request") {
+                    Stepper(value: $seatsRequested, in: 1...max(ride.seats, 1)) {
+                        Text("\(seatsRequested) seat\(seatsRequested == 1 ? "" : "s")")
+                    }
+                    TextField("Pickup note", text: $pickupNote)
+                    TextField("Drop-off note", text: $dropoffNote)
+                    TextField("Luggage note", text: $luggageNote)
+                    TextField("Message to driver", text: $message, axis: .vertical)
+                        .lineLimit(3...5)
+                }
+
+                if let error = session.authError {
+                    Section {
+                        Text(error)
+                            .font(.footnote)
+                            .foregroundStyle(Color.red)
+                    }
+                }
+            }
+            .navigationTitle("Join request")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") {
+                        dismiss()
+                    }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button(session.isRideRequestWorking ? "Sending" : "Send") {
+                        Task {
+                            let didSend = await session.submitRideRequest(
+                                for: ride,
+                                seatsRequested: seatsRequested,
+                                pickupNote: pickupNote,
+                                dropoffNote: dropoffNote,
+                                luggageNote: luggageNote,
+                                message: message
+                            )
+                            if didSend {
+                                dismiss()
+                                onComplete("Request sent to \(ride.driver).")
+                            }
+                        }
+                    }
+                    .disabled(session.isRideRequestWorking || ride.seats <= 0)
+                }
+            }
+            .onAppear {
+                seatsRequested = min(seatsRequested, max(ride.seats, 1))
+            }
+        }
     }
 }
 

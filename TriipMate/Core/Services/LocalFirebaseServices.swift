@@ -247,6 +247,65 @@ struct LocalFirestoreRideService {
     }
 }
 
+struct LocalFirestoreRideRequestService {
+    private let projectId = "demo-triipmate-local"
+
+    private var requestsURL: URL {
+        URL(string: "http://127.0.0.1:8080/v1/projects/\(projectId)/databases/(default)/documents/rideRequests")!
+    }
+
+    func save(_ request: JoinRideRequest, idToken: String) async throws {
+        var urlRequest = URLRequest(url: requestsURL.appendingPathComponent(request.id))
+        urlRequest.httpMethod = "PATCH"
+        urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        urlRequest.setValue("Bearer \(idToken)", forHTTPHeaderField: "Authorization")
+        urlRequest.httpBody = try JSONEncoder().encode(FirestoreRideRequestDocument(request: request))
+
+        let (_, response) = try await URLSession.shared.data(for: urlRequest)
+        guard let httpResponse = response as? HTTPURLResponse,
+              (200..<300).contains(httpResponse.statusCode) else {
+            throw LocalAuthError.invalidResponse
+        }
+    }
+
+    func fetchPassengerRequests(uid: String, idToken: String) async throws -> [JoinRideRequest] {
+        let requests = try await fetchAllRequests(idToken: idToken)
+        return requests
+            .filter { $0.passengerUid == uid }
+            .sorted { $0.createdAt.date > $1.createdAt.date }
+    }
+
+    func fetchDriverRequests(rideIds: Set<String>, idToken: String) async throws -> [JoinRideRequest] {
+        guard !rideIds.isEmpty else { return [] }
+
+        let requests = try await fetchAllRequests(idToken: idToken)
+        return requests
+            .filter { rideIds.contains($0.rideId) }
+            .sorted { $0.createdAt.date > $1.createdAt.date }
+    }
+
+    private func fetchAllRequests(idToken: String) async throws -> [JoinRideRequest] {
+        var urlRequest = URLRequest(url: requestsURL)
+        urlRequest.setValue("Bearer \(idToken)", forHTTPHeaderField: "Authorization")
+
+        let (data, response) = try await URLSession.shared.data(for: urlRequest)
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw LocalAuthError.invalidResponse
+        }
+
+        if httpResponse.statusCode == 404 {
+            return []
+        }
+
+        guard (200..<300).contains(httpResponse.statusCode) else {
+            throw LocalAuthError.invalidResponse
+        }
+
+        let collection = try JSONDecoder().decode(FirestoreRideRequestCollection.self, from: data)
+        return (collection.documents ?? []).compactMap { $0.joinRideRequest }
+    }
+}
+
 private struct FirestoreVehicleDocument: Codable {
     let name: String?
     let fields: [String: FirestoreStringValue]
@@ -364,6 +423,37 @@ private struct FirestoreRideDocument: Encodable {
     }
 }
 
+private struct FirestoreRideRequestDocument: Encodable {
+    let fields: [String: FirestoreRideValue]
+
+    init(request: JoinRideRequest) {
+        var requestFields: [String: FirestoreRideValue] = [
+            "rideId": .string(request.rideId),
+            "passengerUid": .string(request.passengerUid),
+            "passengerDisplayName": .string(request.passengerDisplayName),
+            "seatsRequested": .integer(request.seatsRequested),
+            "pickupNote": .string(request.pickupNote),
+            "dropoffNote": .string(request.dropoffNote),
+            "luggageNote": .string(request.luggageNote),
+            "message": .string(request.message),
+            "pricePerSeatCents": .integer(request.pricePerSeatCents),
+            "status": .string(request.status.rawValue),
+            "createdAt": .timestamp(request.createdAt.date),
+            "updatedAt": .timestamp(request.updatedAt.date)
+        ]
+
+        if let passengerProfilePhotoPath = request.passengerProfilePhotoPath {
+            requestFields["passengerProfilePhotoPath"] = .string(passengerProfilePhotoPath)
+        }
+
+        if let decidedAt = request.decidedAt {
+            requestFields["decidedAt"] = .timestamp(decidedAt.date)
+        }
+
+        fields = requestFields
+    }
+}
+
 private enum FirestoreRideValue: Encodable {
     case string(String)
     case integer(Int)
@@ -405,6 +495,10 @@ private struct FirestoreMapValue: Encodable {
 
 private struct FirestoreRideCollection: Decodable {
     let documents: [FirestoreDecodedRideDocument]?
+}
+
+private struct FirestoreRideRequestCollection: Decodable {
+    let documents: [FirestoreDecodedRideRequestDocument]?
 }
 
 private struct FirestoreDecodedRideDocument: Decodable {
@@ -449,6 +543,48 @@ private struct FirestoreDecodedRideDocument: Decodable {
             notes: notes,
             createdAt: createdAt,
             updatedAt: updatedAt
+        )
+    }
+}
+
+private struct FirestoreDecodedRideRequestDocument: Decodable {
+    let name: String?
+    let fields: [String: FirestoreDecodedValue]
+
+    var joinRideRequest: JoinRideRequest? {
+        let id = name?.split(separator: "/").last.map(String.init) ?? UUID().uuidString
+        guard let rideId = fields["rideId"]?.stringValue,
+              let passengerUid = fields["passengerUid"]?.stringValue,
+              let passengerDisplayName = fields["passengerDisplayName"]?.stringValue,
+              let seatsRequested = fields["seatsRequested"]?.intValue,
+              let pickupNote = fields["pickupNote"]?.stringValue,
+              let dropoffNote = fields["dropoffNote"]?.stringValue,
+              let luggageNote = fields["luggageNote"]?.stringValue,
+              let message = fields["message"]?.stringValue,
+              let pricePerSeatCents = fields["pricePerSeatCents"]?.intValue,
+              let statusRawValue = fields["status"]?.stringValue,
+              let status = RideRequestStatus(rawValue: statusRawValue),
+              let createdAt = fields["createdAt"]?.timestamp,
+              let updatedAt = fields["updatedAt"]?.timestamp else {
+            return nil
+        }
+
+        return JoinRideRequest(
+            id: id,
+            rideId: rideId,
+            passengerUid: passengerUid,
+            passengerDisplayName: passengerDisplayName,
+            passengerProfilePhotoPath: fields["passengerProfilePhotoPath"]?.stringValue,
+            seatsRequested: seatsRequested,
+            pickupNote: pickupNote,
+            dropoffNote: dropoffNote,
+            luggageNote: luggageNote,
+            message: message,
+            pricePerSeatCents: pricePerSeatCents,
+            status: status,
+            createdAt: createdAt,
+            updatedAt: updatedAt,
+            decidedAt: fields["decidedAt"]?.timestamp
         )
     }
 }

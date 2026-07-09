@@ -11,6 +11,8 @@ final class AppSession: ObservableObject {
     @Published var savedVehicles: [SavedVehicle] = []
     @Published var driverRides: [MarketplaceRide] = []
     @Published var searchableRides: [MarketplaceRide] = []
+    @Published var passengerRideRequests: [JoinRideRequest] = []
+    @Published var driverRideRequests: [JoinRideRequest] = []
     @Published var authError: String?
     @Published var authNotice: String?
     @Published var isAuthWorking = false
@@ -24,6 +26,8 @@ final class AppSession: ObservableObject {
     @Published var isDriverRidesLoading = false
     @Published var isDriverRideUpdating = false
     @Published var isRideSearchLoading = false
+    @Published var isRideRequestWorking = false
+    @Published var isDriverRequestsLoading = false
 
     private let authService = LocalFirebaseAuthService()
     private let sessionStore = AuthSessionStore()
@@ -31,6 +35,7 @@ final class AppSession: ObservableObject {
     private let storageService = LocalStorageProfilePhotoService()
     private let vehicleService = LocalFirestoreVehicleService()
     private let rideService = LocalFirestoreRideService()
+    private let rideRequestService = LocalFirestoreRideRequestService()
 
     init() {
         Task { await restoreSession() }
@@ -92,6 +97,8 @@ final class AppSession: ObservableObject {
         savedVehicles = []
         driverRides = []
         searchableRides = []
+        passengerRideRequests = []
+        driverRideRequests = []
         isAuthenticated = false
         authError = nil
         authNotice = nil
@@ -380,6 +387,180 @@ final class AppSession: ObservableObject {
         }
     }
 
+    func submitRideRequest(
+        for ride: Ride,
+        seatsRequested: Int,
+        pickupNote: String,
+        dropoffNote: String,
+        luggageNote: String,
+        message: String
+    ) async -> Bool {
+        guard let authUser, let userProfile else {
+            authError = "Please log in before requesting a ride."
+            return false
+        }
+
+        guard seatsRequested > 0, seatsRequested <= ride.seats else {
+            authError = "Choose a valid number of seats for this ride."
+            return false
+        }
+
+        let existingRequests: [JoinRideRequest]
+        isRideRequestWorking = true
+        authError = nil
+        defer { isRideRequestWorking = false }
+
+        do {
+            existingRequests = try await rideRequestService.fetchPassengerRequests(uid: authUser.uid, idToken: authUser.idToken)
+            if existingRequests.contains(where: { $0.rideId == ride.id && [.pending, .accepted].contains($0.status) }) {
+                authError = "You already have an active request for this ride."
+                passengerRideRequests = existingRequests
+                return false
+            }
+
+            let now = FirestoreTimestamp(date: Date())
+            let displayName = "\(userProfile.firstName) \(userProfile.lastName)".trimmingCharacters(in: .whitespacesAndNewlines)
+            let request = JoinRideRequest(
+                id: UUID().uuidString.lowercased(),
+                rideId: ride.id,
+                passengerUid: authUser.uid,
+                passengerDisplayName: displayName.isEmpty ? authUser.email : displayName,
+                passengerProfilePhotoPath: userProfile.profilePhotoPath,
+                seatsRequested: seatsRequested,
+                pickupNote: pickupNote.trimmingCharacters(in: .whitespacesAndNewlines),
+                dropoffNote: dropoffNote.trimmingCharacters(in: .whitespacesAndNewlines),
+                luggageNote: luggageNote.trimmingCharacters(in: .whitespacesAndNewlines),
+                message: message.trimmingCharacters(in: .whitespacesAndNewlines),
+                pricePerSeatCents: ride.price * 100,
+                status: .pending,
+                createdAt: now,
+                updatedAt: now,
+                decidedAt: nil
+            )
+
+            try await rideRequestService.save(request, idToken: authUser.idToken)
+            passengerRideRequests = ([request] + existingRequests).sorted { $0.createdAt.date > $1.createdAt.date }
+            return true
+        } catch {
+            authError = error.localizedDescription
+            return false
+        }
+    }
+
+    func loadPassengerRideRequests() async {
+        guard let authUser else {
+            authError = "Please log in before loading your requests."
+            return
+        }
+
+        isRideRequestWorking = true
+        authError = nil
+        defer { isRideRequestWorking = false }
+
+        do {
+            passengerRideRequests = try await rideRequestService.fetchPassengerRequests(uid: authUser.uid, idToken: authUser.idToken)
+        } catch {
+            authError = error.localizedDescription
+        }
+    }
+
+    func loadDriverRideRequests() async {
+        guard let authUser else {
+            authError = "Please log in before loading passenger requests."
+            return
+        }
+
+        isDriverRequestsLoading = true
+        authError = nil
+        defer { isDriverRequestsLoading = false }
+
+        do {
+            if driverRides.isEmpty {
+                driverRides = try await rideService.fetchDriverRides(uid: authUser.uid, idToken: authUser.idToken)
+            }
+            let rideIds = Set(driverRides.map(\.id))
+            driverRideRequests = try await rideRequestService.fetchDriverRequests(rideIds: rideIds, idToken: authUser.idToken)
+        } catch {
+            authError = error.localizedDescription
+        }
+    }
+
+    func acceptRideRequest(_ request: JoinRideRequest) async -> Bool {
+        guard let authUser else {
+            authError = "Please log in before accepting requests."
+            return false
+        }
+
+        guard request.status == .pending else {
+            authError = "This request has already been decided."
+            return false
+        }
+
+        guard let ride = driverRides.first(where: { $0.id == request.rideId }) else {
+            authError = "Could not find the ride for this request."
+            return false
+        }
+
+        guard ride.driverUid == authUser.uid else {
+            authError = "You can only manage requests for your own rides."
+            return false
+        }
+
+        guard ride.availableSeats >= request.seatsRequested else {
+            authError = "This ride does not have enough open seats anymore."
+            return false
+        }
+
+        isRideRequestWorking = true
+        authError = nil
+        defer { isRideRequestWorking = false }
+
+        do {
+            let remainingSeats = ride.availableSeats - request.seatsRequested
+            let updatedRide = ride.updated(
+                status: remainingSeats == 0 ? .full : ride.status,
+                availableSeats: remainingSeats
+            )
+            let updatedRequest = request.updated(status: .accepted)
+
+            try await rideService.save(updatedRide, idToken: authUser.idToken)
+            try await rideRequestService.save(updatedRequest, idToken: authUser.idToken)
+            replaceDriverRide(updatedRide)
+            replaceDriverRequest(updatedRequest)
+            replaceSearchableRide(updatedRide)
+            return true
+        } catch {
+            authError = error.localizedDescription
+            return false
+        }
+    }
+
+    func declineRideRequest(_ request: JoinRideRequest) async -> Bool {
+        guard let authUser else {
+            authError = "Please log in before declining requests."
+            return false
+        }
+
+        guard request.status == .pending else {
+            authError = "This request has already been decided."
+            return false
+        }
+
+        isRideRequestWorking = true
+        authError = nil
+        defer { isRideRequestWorking = false }
+
+        do {
+            let updatedRequest = request.updated(status: .declined)
+            try await rideRequestService.save(updatedRequest, idToken: authUser.idToken)
+            replaceDriverRequest(updatedRequest)
+            return true
+        } catch {
+            authError = error.localizedDescription
+            return false
+        }
+    }
+
     private func performAuth(_ action: () async throws -> (AuthUser, UserProfile)) async {
         isAuthWorking = true
         authError = nil
@@ -443,6 +624,8 @@ final class AppSession: ObservableObject {
         }
         savedVehicles = (try? await vehicleService.fetchAll(uid: authUser.uid, idToken: authUser.idToken)) ?? []
         driverRides = (try? await rideService.fetchDriverRides(uid: authUser.uid, idToken: authUser.idToken)) ?? []
+        passengerRideRequests = (try? await rideRequestService.fetchPassengerRequests(uid: authUser.uid, idToken: authUser.idToken)) ?? []
+        driverRideRequests = (try? await rideRequestService.fetchDriverRequests(rideIds: Set(driverRides.map(\.id)), idToken: authUser.idToken)) ?? []
         isAuthenticated = true
     }
 
@@ -453,6 +636,22 @@ final class AppSession: ObservableObject {
             driverRides.append(ride)
         }
         driverRides.sort { $0.departureAt.date < $1.departureAt.date }
+    }
+
+    private func replaceDriverRequest(_ request: JoinRideRequest) {
+        if let index = driverRideRequests.firstIndex(where: { $0.id == request.id }) {
+            driverRideRequests[index] = request
+        } else {
+            driverRideRequests.append(request)
+        }
+        driverRideRequests.sort { $0.createdAt.date > $1.createdAt.date }
+    }
+
+    private func replaceSearchableRide(_ ride: MarketplaceRide) {
+        if let index = searchableRides.firstIndex(where: { $0.id == ride.id }) {
+            searchableRides[index] = ride
+        }
+        searchableRides.removeAll { $0.availableSeats <= 0 || ![.published, .active].contains($0.status) }
     }
 }
 
@@ -482,6 +681,29 @@ extension MarketplaceRide {
             notes: notes ?? self.notes,
             createdAt: createdAt,
             updatedAt: FirestoreTimestamp(date: Date())
+        )
+    }
+}
+
+extension JoinRideRequest {
+    func updated(status: RideRequestStatus) -> JoinRideRequest {
+        let now = FirestoreTimestamp(date: Date())
+        return JoinRideRequest(
+            id: id,
+            rideId: rideId,
+            passengerUid: passengerUid,
+            passengerDisplayName: passengerDisplayName,
+            passengerProfilePhotoPath: passengerProfilePhotoPath,
+            seatsRequested: seatsRequested,
+            pickupNote: pickupNote,
+            dropoffNote: dropoffNote,
+            luggageNote: luggageNote,
+            message: message,
+            pricePerSeatCents: pricePerSeatCents,
+            status: status,
+            createdAt: createdAt,
+            updatedAt: now,
+            decidedAt: now
         )
     }
 }

@@ -246,7 +246,16 @@ struct RoleSwitchHeader: View {
 
 struct DriverDashboardView: View {
     @EnvironmentObject private var session: AppSession
-    @State private var requests = SampleData.rideRequests
+
+    private var pendingRequests: [JoinRideRequest] {
+        session.driverRideRequests.filter { $0.status == .pending }
+    }
+
+    private var openSeatCount: Int {
+        session.driverRides
+            .filter { [.published, .active].contains($0.status) }
+            .reduce(0) { $0 + $1.availableSeats }
+    }
 
     var body: some View {
         NavigationStack {
@@ -263,6 +272,9 @@ struct DriverDashboardView: View {
             .safeAreaInset(edge: .top, spacing: 0) {
                 RoleSwitchHeader()
             }
+            .task {
+                await session.loadDriverRideRequests()
+            }
         }
     }
 
@@ -271,7 +283,7 @@ struct DriverDashboardView: View {
             Text("You are driving")
                 .font(.system(size: 30, weight: .bold))
                 .foregroundStyle(Color.tmInk)
-            Text("Manage your upcoming New York to Chicago trip and choose the passengers you want to ride with.")
+            Text("Review passenger requests for your published rides and keep your open seats up to date.")
                 .font(.subheadline)
                 .foregroundStyle(Color.tmSlate)
         }
@@ -279,8 +291,8 @@ struct DriverDashboardView: View {
 
     private var actionSummary: some View {
         HStack(spacing: 12) {
-            DriverMetric(value: "\(requests.count)", label: "New requests", icon: "person.badge.clock.fill", color: .tmAmber)
-            DriverMetric(value: "2", label: "Open seats", icon: "car.side.fill", color: .tmGreen)
+            DriverMetric(value: "\(pendingRequests.count)", label: "New requests", icon: "person.badge.clock.fill", color: .tmAmber)
+            DriverMetric(value: "\(openSeatCount)", label: "Open seats", icon: "car.side.fill", color: .tmGreen)
         }
     }
 
@@ -291,12 +303,22 @@ struct DriverDashboardView: View {
                     .font(.title3.bold())
                     .foregroundStyle(Color.tmInk)
                 Spacer()
-                Text("Review all")
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(Color.tmGreen)
+                Button {
+                    Task {
+                        await session.loadDriverRideRequests()
+                    }
+                } label: {
+                    Image(systemName: "arrow.clockwise")
+                }
+                .buttonStyle(.bordered)
+                .tint(Color.tmGreen)
             }
 
-            if requests.isEmpty {
+            if session.isDriverRequestsLoading {
+                ProgressView()
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 24)
+            } else if session.driverRideRequests.isEmpty {
                 VStack(spacing: 8) {
                     Image(systemName: "checkmark.circle")
                         .font(.title)
@@ -311,11 +333,18 @@ struct DriverDashboardView: View {
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 24)
             } else {
-                ForEach(requests) { request in
-                    DriverRequestCard(request: request) {
-                        requests.removeAll { $0.id == request.id }
+                ForEach(session.driverRideRequests) { request in
+                    DriverJoinRequestCard(
+                        request: request,
+                        ride: session.driverRides.first { $0.id == request.rideId }
+                    ) {
+                        Task {
+                            await session.acceptRideRequest(request)
+                        }
                     } onDecline: {
-                        requests.removeAll { $0.id == request.id }
+                        Task {
+                            await session.declineRideRequest(request)
+                        }
                     }
                 }
             }
@@ -882,6 +911,46 @@ private extension RideStatus {
     }
 }
 
+private extension RideRequestStatus {
+    var displayTitle: String {
+        switch self {
+        case .pending:
+            return "Pending"
+        case .accepted:
+            return "Accepted"
+        case .declined:
+            return "Declined"
+        case .cancelled:
+            return "Cancelled"
+        case .expired:
+            return "Expired"
+        }
+    }
+
+    var tint: Color {
+        switch self {
+        case .pending:
+            return Color.tmAmber
+        case .accepted:
+            return Color.tmGreen
+        case .declined, .cancelled, .expired:
+            return Color.tmSlate
+        }
+    }
+}
+
+private extension JoinRideRequest {
+    var createdSummary: String {
+        Self.requestDateFormatter.string(from: createdAt.date)
+    }
+
+    private static let requestDateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "MMM d, h:mm a"
+        return formatter
+    }()
+}
+
 private extension VehicleSnapshot {
     var displayName: String {
         "\(year) \(make) \(model)".trimmingCharacters(in: .whitespacesAndNewlines)
@@ -889,6 +958,12 @@ private extension VehicleSnapshot {
 
     var shortName: String {
         "\(make) \(model)".trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+}
+
+private extension String {
+    func emptyFallback(_ value: String) -> String {
+        trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? value : self
     }
 }
 
@@ -947,6 +1022,194 @@ struct DriverMetric: View {
         .padding(14)
         .background(.white)
         .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+}
+
+struct DriverJoinRequestCard: View {
+    let request: JoinRideRequest
+    let ride: MarketplaceRide?
+    let onAccept: () -> Void
+    let onDecline: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 10) {
+                Avatar(initials: initials(for: request.passengerDisplayName))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(request.passengerDisplayName)
+                        .font(.headline)
+                        .foregroundStyle(Color.tmInk)
+                    Text("\(request.seatsRequested) seat\(request.seatsRequested == 1 ? "" : "s") • \(request.createdSummary)")
+                        .font(.caption)
+                        .foregroundStyle(Color.tmSlate)
+                }
+                Spacer()
+                Text(request.status.displayTitle)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(request.status.tint)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(request.status.tint.opacity(0.12))
+                    .clipShape(Capsule())
+            }
+
+            Label(routeSummary, systemImage: "mappin.and.ellipse")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(Color.tmGreen)
+
+            Text(request.message.isEmpty ? "No passenger message yet." : request.message)
+                .font(.subheadline)
+                .foregroundStyle(Color.tmSlate)
+
+            NavigationLink {
+                DriverJoinRequestDetailView(
+                    request: request,
+                    ride: ride,
+                    onAccept: onAccept,
+                    onDecline: onDecline
+                )
+            } label: {
+                Label("Details", systemImage: "doc.text.magnifyingglass")
+                    .font(.subheadline.weight(.semibold))
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(Color.tmGreen)
+        }
+        .padding(16)
+        .background(.white)
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+
+    private var routeSummary: String {
+        guard let ride else {
+            return "Ride details unavailable"
+        }
+        return "\(ride.from.displayName) to \(ride.to.displayName)"
+    }
+
+    private func initials(for name: String) -> String {
+        let parts = name.split(separator: " ")
+        let letters = parts.prefix(2).compactMap(\.first)
+        return letters.isEmpty ? "TM" : String(letters).uppercased()
+    }
+}
+
+struct DriverJoinRequestDetailView: View {
+    let request: JoinRideRequest
+    let ride: MarketplaceRide?
+    let onAccept: () -> Void
+    let onDecline: () -> Void
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        ScrollView {
+            VStack(spacing: 16) {
+                passengerSummary
+                routeSection
+                requestSection
+                messageSection
+            }
+            .padding(20)
+        }
+        .background(Color.tmMist.ignoresSafeArea())
+        .navigationTitle("Request details")
+        .navigationBarTitleDisplayMode(.inline)
+        .safeAreaInset(edge: .bottom) {
+            actionBar
+        }
+    }
+
+    private var passengerSummary: some View {
+        HStack(spacing: 14) {
+            Avatar(initials: initials(for: request.passengerDisplayName))
+                .scaleEffect(1.15)
+                .padding(.horizontal, 4)
+            VStack(alignment: .leading, spacing: 5) {
+                Text(request.passengerDisplayName)
+                    .font(.title3.bold())
+                    .foregroundStyle(Color.tmInk)
+                Text(request.status.displayTitle)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(request.status.tint)
+                Label("\(request.seatsRequested) seat\(request.seatsRequested == 1 ? "" : "s") requested", systemImage: "person.2.fill")
+                    .font(.caption)
+                    .foregroundStyle(Color.tmSlate)
+            }
+            Spacer()
+        }
+        .padding(16)
+        .background(.white)
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+
+    private var routeSection: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            RequestDetailRow(icon: "location.fill", title: "Pickup", value: request.pickupNote.emptyFallback("Not added"))
+            RequestDetailRow(icon: "mappin.and.ellipse", title: "Drop-off", value: request.dropoffNote.emptyFallback("Not added"))
+            RequestDetailRow(icon: "calendar", title: "Departure", value: ride.map { "\($0.departureSummary)" } ?? "Ride unavailable")
+            RequestDetailRow(icon: "point.topleft.down.curvedto.point.bottomright.up.fill", title: "Route", value: ride.map { "\($0.from.displayName) to \($0.to.displayName)" } ?? "Ride unavailable")
+        }
+        .requestDetailSection()
+    }
+
+    private var requestSection: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            RequestDetailRow(icon: "person.2.fill", title: "Seats requested", value: "\(request.seatsRequested)")
+            RequestDetailRow(icon: "dollarsign.circle.fill", title: "Price", value: "$\(request.pricePerSeatCents / 100) per seat")
+            RequestDetailRow(icon: "banknote.fill", title: "Request total", value: "$\((request.pricePerSeatCents * request.seatsRequested) / 100)")
+            RequestDetailRow(icon: "clock.fill", title: "Requested", value: request.createdSummary)
+            RequestDetailRow(icon: "suitcase.fill", title: "Luggage", value: request.luggageNote.emptyFallback("Not added"))
+        }
+        .requestDetailSection()
+    }
+
+    private var messageSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Label("Passenger message", systemImage: "text.bubble.fill")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(Color.tmGreen)
+            Text(request.message.emptyFallback("No message added."))
+                .font(.body)
+                .foregroundStyle(Color.tmInk)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .requestDetailSection()
+    }
+
+    private var actionBar: some View {
+        HStack(spacing: 12) {
+            Button {
+                onDecline()
+                dismiss()
+            } label: {
+                Label("Decline", systemImage: "xmark")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.bordered)
+            .tint(Color.tmSlate)
+            .disabled(request.status != .pending)
+
+            Button {
+                onAccept()
+                dismiss()
+            } label: {
+                Label("Accept", systemImage: "checkmark")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(Color.tmGreen)
+            .disabled(request.status != .pending)
+        }
+        .padding(.horizontal, 20)
+        .padding(.vertical, 12)
+        .background(.ultraThinMaterial)
+    }
+
+    private func initials(for name: String) -> String {
+        let parts = name.split(separator: " ")
+        let letters = parts.prefix(2).compactMap(\.first)
+        return letters.isEmpty ? "TM" : String(letters).uppercased()
     }
 }
 

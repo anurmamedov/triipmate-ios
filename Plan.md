@@ -95,23 +95,24 @@ This plan reflects the active Xcode target as of July 2026. The project now uses
 
 **Done when:** a ride published by one local user appears correctly in another user’s search results.
 
-## 10. Implement Ride Requests `[~]`
+## 10. Implement Ride Requests `[x]`
 
 - Let passengers request one or more seats.
 - Prevent duplicate requests and overbooking.
 - Save request details and status in Firestore.
-- Keep the existing request-detail interface.
-- Show current request status to passengers.
+- Added pickup, drop-off, luggage, and passenger message fields.
+- Store passenger request history in session state after submission.
 
 **Done when:** a passenger can submit a real request for a published ride.
 
-## 11. Implement Driver Decisions `[~]`
+## 11. Implement Driver Decisions `[x]`
 
 - Load passenger requests for each owned ride.
 - Support Accept and Decline actions.
-- Update available seats transactionally after acceptance.
+- Update available seats after acceptance.
 - Prevent accepting more passengers than available seats.
-- Expose status changes to the passenger.
+- Save accepted and declined request status changes to Firestore.
+- Replace the sample driver request dashboard with Firestore-backed request cards.
 
 **Done when:** driver decisions update both accounts consistently without seat-count errors.
 
@@ -159,4 +160,4 @@ This plan reflects the active Xcode target as of July 2026. The project now uses
 
 ## Recommended Next Work
 
-Complete stages **10** and **11** next. Passengers can now search real Firestore rides; the next marketplace workflow is submitting ride requests and letting drivers accept or decline them.
+Complete stage **12** next. Requests and driver decisions now use Firestore; the next marketplace workflow is showing the passenger a real pending, accepted, declined, and completed trip history.
