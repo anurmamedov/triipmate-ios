@@ -161,4 +161,4 @@ This plan reflects the active Xcode target as of July 2026. The project now uses
 
 ## Recommended Next Work
 
-Complete stage **12** next. Requests and driver decisions now use Firestore; the next marketplace workflow is showing the passenger a real pending, accepted, declined, and completed trip history.
+Complete stage **13** next. Ride publishing, search, requests, driver decisions, and passenger trip history now use Firestore; the next marketplace workflow is replacing sample messages with real-time Firestore conversations between involved passengers and drivers.
