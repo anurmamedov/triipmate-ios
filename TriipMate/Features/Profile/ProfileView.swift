@@ -278,35 +278,70 @@ struct VehicleDetailsView: View {
     @State private var powerType = "Fuel"
     @State private var bodyType = "Sedan"
     @State private var validationMessage: String?
+    @State private var vehicleToDelete: SavedVehicle?
 
     var body: some View {
         Form {
             if !session.savedVehicles.isEmpty {
                 Section("Saved vehicles") {
                     ForEach(session.savedVehicles) { vehicle in
-                        Button {
-                            load(vehicle)
-                        } label: {
-                            HStack(spacing: 12) {
-                                Image(systemName: "car.fill")
-                                    .foregroundStyle(Color.tmGreen)
-                                    .frame(width: 28)
-                                VStack(alignment: .leading, spacing: 3) {
-                                    Text(vehicle.displayName)
-                                        .font(.body.weight(.semibold))
-                                        .foregroundStyle(Color.tmInk)
-                                    Text("\(vehicle.powerType) · \(vehicle.bodyType)")
-                                        .font(.caption)
-                                        .foregroundStyle(Color.tmSlate)
-                                }
-                                Spacer()
-                                if editingVehicleID == vehicle.id {
-                                    Image(systemName: "checkmark.circle.fill")
+                        VStack(alignment: .leading, spacing: 12) {
+                            Button {
+                                load(vehicle)
+                            } label: {
+                                HStack(spacing: 12) {
+                                    Image(systemName: "car.fill")
                                         .foregroundStyle(Color.tmGreen)
+                                        .frame(width: 28)
+                                    VStack(alignment: .leading, spacing: 3) {
+                                        HStack(spacing: 6) {
+                                            Text(vehicle.displayName)
+                                                .font(.body.weight(.semibold))
+                                                .foregroundStyle(Color.tmInk)
+                                            if vehicle.isDefault {
+                                                Label("Default", systemImage: "checkmark.seal.fill")
+                                                    .font(.caption2.weight(.semibold))
+                                                    .labelStyle(.titleAndIcon)
+                                                    .foregroundStyle(Color.tmGreen)
+                                            }
+                                        }
+                                        Text("\(vehicle.powerType) · \(vehicle.bodyType)")
+                                            .font(.caption)
+                                            .foregroundStyle(Color.tmSlate)
+                                    }
+                                    Spacer()
+                                    if editingVehicleID == vehicle.id {
+                                        Image(systemName: "checkmark.circle.fill")
+                                            .foregroundStyle(Color.tmGreen)
+                                    }
                                 }
                             }
+                            .buttonStyle(.plain)
+
+                            HStack(spacing: 10) {
+                                Button {
+                                    Task { await session.setDefaultVehicle(vehicle) }
+                                } label: {
+                                    Label(vehicle.isDefault ? "Default vehicle" : "Make default", systemImage: vehicle.isDefault ? "checkmark.circle.fill" : "circle")
+                                        .font(.caption.weight(.semibold))
+                                }
+                                .buttonStyle(.bordered)
+                                .tint(Color.tmGreen)
+                                .disabled(vehicle.isDefault || session.isVehicleWorking)
+
+                                Spacer()
+
+                                Button(role: .destructive) {
+                                    vehicleToDelete = vehicle
+                                } label: {
+                                    Label("Delete", systemImage: "trash")
+                                        .font(.caption.weight(.semibold))
+                                }
+                                .buttonStyle(.borderless)
+                                .disabled(session.isVehicleWorking)
+                            }
                         }
-                        .buttonStyle(.plain)
+                        .padding(.vertical, 4)
                     }
                 }
             }
@@ -371,6 +406,20 @@ struct VehicleDetailsView: View {
                 }
             }
         }
+        .alert(item: $vehicleToDelete) { vehicle in
+            Alert(
+                title: Text("Delete vehicle?"),
+                message: Text("This removes \(vehicle.displayName) from your saved vehicles."),
+                primaryButton: .destructive(Text("Delete")) {
+                    Task {
+                        if await session.deleteVehicle(vehicle), editingVehicleID == vehicle.id {
+                            clearForm()
+                        }
+                    }
+                },
+                secondaryButton: .cancel()
+            )
+        }
         .tint(Color.tmGreen)
     }
 
@@ -405,13 +454,15 @@ struct VehicleDetailsView: View {
         }
 
         validationMessage = nil
+        let isDefault = session.savedVehicles.first(where: { $0.id == editingVehicleID })?.isDefault ?? session.savedVehicles.isEmpty
         let vehicle = SavedVehicle(
             id: editingVehicleID ?? UUID().uuidString,
             make: cleanMake,
             model: cleanModel,
             year: year,
             powerType: powerType,
-            bodyType: bodyType
+            bodyType: bodyType,
+            isDefault: isDefault
         )
         Task {
             if await session.saveVehicle(vehicle) {

@@ -248,18 +248,92 @@ final class AppSession: ObservableObject {
             return false
         }
 
+        guard validateVehicle(vehicle) else {
+            return false
+        }
+
+        if savedVehicles.contains(where: { $0.id != vehicle.id && $0.duplicateKey == vehicle.duplicateKey }) {
+            authError = "This vehicle is already saved."
+            return false
+        }
+
         isVehicleWorking = true
         authError = nil
         defer { isVehicleWorking = false }
 
         do {
-            try await vehicleService.save(vehicle, uid: authUser.uid, idToken: authUser.idToken)
-            if let index = savedVehicles.firstIndex(where: { $0.id == vehicle.id }) {
-                savedVehicles[index] = vehicle
-            } else {
-                savedVehicles.append(vehicle)
+            var vehicleToSave = vehicle
+            if savedVehicles.isEmpty {
+                vehicleToSave = vehicle.settingDefault(true)
             }
-            savedVehicles.sort { $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending }
+            try await vehicleService.save(vehicleToSave, uid: authUser.uid, idToken: authUser.idToken)
+            if let index = savedVehicles.firstIndex(where: { $0.id == vehicle.id }) {
+                savedVehicles[index] = vehicleToSave
+            } else {
+                savedVehicles.append(vehicleToSave)
+            }
+            sortSavedVehicles()
+            return true
+        } catch {
+            authError = error.localizedDescription
+            return false
+        }
+    }
+
+    func setDefaultVehicle(_ vehicle: SavedVehicle) async -> Bool {
+        guard let authUser else {
+            authError = "Please log in before changing your default vehicle."
+            return false
+        }
+
+        guard savedVehicles.contains(where: { $0.id == vehicle.id }) else {
+            authError = "This vehicle is no longer available."
+            return false
+        }
+
+        isVehicleWorking = true
+        authError = nil
+        defer { isVehicleWorking = false }
+
+        do {
+            let updatedVehicles = savedVehicles.map { $0.settingDefault($0.id == vehicle.id) }
+            for updatedVehicle in updatedVehicles {
+                if updatedVehicle != savedVehicles.first(where: { $0.id == updatedVehicle.id }) {
+                    try await vehicleService.save(updatedVehicle, uid: authUser.uid, idToken: authUser.idToken)
+                }
+            }
+            savedVehicles = updatedVehicles
+            sortSavedVehicles()
+            return true
+        } catch {
+            authError = error.localizedDescription
+            return false
+        }
+    }
+
+    func deleteVehicle(_ vehicle: SavedVehicle) async -> Bool {
+        guard let authUser else {
+            authError = "Please log in before deleting a vehicle."
+            return false
+        }
+
+        isVehicleWorking = true
+        authError = nil
+        defer { isVehicleWorking = false }
+
+        do {
+            try await vehicleService.delete(vehicleID: vehicle.id, uid: authUser.uid, idToken: authUser.idToken)
+            savedVehicles.removeAll { $0.id == vehicle.id }
+
+            if vehicle.isDefault, let replacement = savedVehicles.first {
+                let defaultVehicle = replacement.settingDefault(true)
+                try await vehicleService.save(defaultVehicle, uid: authUser.uid, idToken: authUser.idToken)
+                if let index = savedVehicles.firstIndex(where: { $0.id == defaultVehicle.id }) {
+                    savedVehicles[index] = defaultVehicle
+                }
+            }
+
+            sortSavedVehicles()
             return true
         } catch {
             authError = error.localizedDescription
@@ -279,13 +353,17 @@ final class AppSession: ObservableObject {
 
         do {
             if let vehicleToSave {
+                if savedVehicles.contains(where: { $0.id != vehicleToSave.id && $0.duplicateKey == vehicleToSave.duplicateKey }) {
+                    throw LocalAuthError.invalidInput("This vehicle is already saved. Choose it from your saved vehicles.")
+                }
+                let vehicleToSave = savedVehicles.isEmpty ? vehicleToSave.settingDefault(true) : vehicleToSave
                 try await vehicleService.save(vehicleToSave, uid: authUser.uid, idToken: authUser.idToken)
                 if let index = savedVehicles.firstIndex(where: { $0.id == vehicleToSave.id }) {
                     savedVehicles[index] = vehicleToSave
                 } else {
                     savedVehicles.append(vehicleToSave)
                 }
-                savedVehicles.sort { $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending }
+                sortSavedVehicles()
             }
 
             try await rideService.save(ride, idToken: authUser.idToken)
@@ -652,6 +730,46 @@ final class AppSession: ObservableObject {
             searchableRides[index] = ride
         }
         searchableRides.removeAll { $0.availableSeats <= 0 || ![.published, .active].contains($0.status) }
+    }
+
+    private func validateVehicle(_ vehicle: SavedVehicle) -> Bool {
+        let make = vehicle.make.trimmingCharacters(in: .whitespacesAndNewlines)
+        let model = vehicle.model.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !make.isEmpty, !model.isEmpty, vehicle.year.count == 4 else {
+            authError = "Enter the vehicle make, model, and four-digit year."
+            return false
+        }
+
+        let calendarYear = Calendar.current.component(.year, from: Date())
+        guard let year = Int(vehicle.year), (1980...(calendarYear + 1)).contains(year) else {
+            authError = "Enter a vehicle year between 1980 and \(calendarYear + 1)."
+            return false
+        }
+
+        return true
+    }
+
+    private func sortSavedVehicles() {
+        savedVehicles.sort {
+            if $0.isDefault != $1.isDefault {
+                return $0.isDefault
+            }
+            return $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending
+        }
+    }
+}
+
+private extension SavedVehicle {
+    func settingDefault(_ value: Bool) -> SavedVehicle {
+        SavedVehicle(
+            id: id,
+            make: make,
+            model: model,
+            year: year,
+            powerType: powerType,
+            bodyType: bodyType,
+            isDefault: value
+        )
     }
 }
 

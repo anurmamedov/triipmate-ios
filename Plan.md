@@ -46,13 +46,13 @@ This plan reflects the active Xcode target as of July 2026. The project now uses
 
 **Done when:** no visible profile value is hard-coded and all user data reloads correctly after logout and login.
 
-## 5. Complete Vehicle Management `[~]`
+## 5. Complete Vehicle Management `[x]`
 
-- Keep Firestore-backed vehicle creation and editing.
-- Add vehicle deletion with confirmation.
-- Allow selection of a default vehicle.
-- Prevent duplicate or invalid vehicles.
-- Refresh Post Ride options immediately after changes.
+- Kept Firestore-backed vehicle creation and editing.
+- Added vehicle deletion with confirmation.
+- Added default vehicle selection and default-first sorting.
+- Added duplicate and year validation for saved vehicles.
+- Updated Post Ride to prefer the default vehicle and prevent saving duplicate vehicles.
 
 **Done when:** drivers can add, edit, delete, and select vehicles reliably from Profile and Post Ride.
 

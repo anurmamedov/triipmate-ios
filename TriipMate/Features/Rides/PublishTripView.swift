@@ -77,7 +77,7 @@ struct PublishTripView: View {
                     if !session.savedVehicles.isEmpty {
                         Picker("Use vehicle", selection: $selectedVehicleID) {
                             ForEach(session.savedVehicles) { vehicle in
-                                Text(vehicle.displayName).tag(vehicle.id)
+                                Text(vehicle.isDefault ? "\(vehicle.displayName) · Default" : vehicle.displayName).tag(vehicle.id)
                             }
                             Text("Enter new vehicle").tag("new")
                         }
@@ -93,7 +93,7 @@ struct PublishTripView: View {
                                 Text(selectedVehicle.displayName)
                                     .font(.body.weight(.semibold))
                                     .foregroundStyle(Color.tmInk)
-                                Text("\(selectedVehicle.powerType) · \(selectedVehicle.bodyType)")
+                                Text(selectedVehicle.isDefault ? "\(selectedVehicle.powerType) · \(selectedVehicle.bodyType) · Default" : "\(selectedVehicle.powerType) · \(selectedVehicle.bodyType)")
                                     .font(.caption)
                                     .foregroundStyle(Color.tmSlate)
                             }
@@ -163,8 +163,8 @@ struct PublishTripView: View {
     }
 
     private func selectDefaultVehicle() {
-        guard selectedVehicleID == "new", let firstVehicle = session.savedVehicles.first else { return }
-        selectedVehicleID = firstVehicle.id
+        guard selectedVehicleID == "new" else { return }
+        selectedVehicleID = session.savedVehicles.first(where: \.isDefault)?.id ?? session.savedVehicles.first?.id ?? "new"
     }
 
     private var publishAction: some View {
@@ -327,7 +327,8 @@ struct PublishTripView: View {
                     model: trimmedModel,
                     year: trimmedYear,
                     powerType: powerType,
-                    bodyType: bodyType
+                    bodyType: bodyType,
+                    isDefault: session.savedVehicles.isEmpty
                 )
             }
         }
@@ -415,7 +416,7 @@ struct PublishTripView: View {
         totalSeats = 4
         seats = 2
         price = 120
-        selectedVehicleID = session.savedVehicles.first?.id ?? "new"
+        selectedVehicleID = session.savedVehicles.first(where: \.isDefault)?.id ?? session.savedVehicles.first?.id ?? "new"
         carMake = ""
         carModel = ""
         carYear = ""

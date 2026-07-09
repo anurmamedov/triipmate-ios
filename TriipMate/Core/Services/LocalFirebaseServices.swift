@@ -110,13 +110,30 @@ struct LocalFirestoreVehicleService {
         request.setValue("Bearer \(idToken)", forHTTPHeaderField: "Authorization")
         request.httpBody = try JSONEncoder().encode(
             FirestoreVehicleDocument(fields: [
-                "make": FirestoreStringValue(stringValue: vehicle.make),
-                "model": FirestoreStringValue(stringValue: vehicle.model),
-                "year": FirestoreStringValue(stringValue: vehicle.year),
-                "powerType": FirestoreStringValue(stringValue: vehicle.powerType),
-                "bodyType": FirestoreStringValue(stringValue: vehicle.bodyType)
+                "make": FirestoreVehicleValue(stringValue: vehicle.make),
+                "model": FirestoreVehicleValue(stringValue: vehicle.model),
+                "year": FirestoreVehicleValue(stringValue: vehicle.year),
+                "powerType": FirestoreVehicleValue(stringValue: vehicle.powerType),
+                "bodyType": FirestoreVehicleValue(stringValue: vehicle.bodyType),
+                "isDefault": FirestoreVehicleValue(booleanValue: vehicle.isDefault)
             ])
         )
+
+        let (_, response) = try await URLSession.shared.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse,
+              (200..<300).contains(httpResponse.statusCode) else {
+            throw LocalAuthError.invalidResponse
+        }
+    }
+
+    func delete(vehicleID: String, uid: String, idToken: String) async throws {
+        let url = usersURL
+            .appendingPathComponent(uid)
+            .appendingPathComponent("vehicles")
+            .appendingPathComponent(vehicleID)
+        var request = URLRequest(url: url)
+        request.httpMethod = "DELETE"
+        request.setValue("Bearer \(idToken)", forHTTPHeaderField: "Authorization")
 
         let (_, response) = try await URLSession.shared.data(for: request)
         guard let httpResponse = response as? HTTPURLResponse,
@@ -150,10 +167,18 @@ struct LocalFirestoreVehicleService {
                 model: model,
                 year: year,
                 powerType: fields["powerType"]?.stringValue ?? "Fuel",
-                bodyType: fields["bodyType"]?.stringValue ?? "Sedan"
+                bodyType: fields["bodyType"]?.stringValue ?? "Sedan",
+                isDefault: fields["isDefault"]?.booleanValue ?? false
             )
         }
-        .sorted { $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending }
+        .sorted(by: Self.vehicleSort)
+    }
+
+    private static func vehicleSort(_ lhs: SavedVehicle, _ rhs: SavedVehicle) -> Bool {
+        if lhs.isDefault != rhs.isDefault {
+            return lhs.isDefault
+        }
+        return lhs.displayName.localizedCaseInsensitiveCompare(rhs.displayName) == .orderedAscending
     }
 }
 
@@ -308,9 +333,9 @@ struct LocalFirestoreRideRequestService {
 
 private struct FirestoreVehicleDocument: Codable {
     let name: String?
-    let fields: [String: FirestoreStringValue]
+    let fields: [String: FirestoreVehicleValue]
 
-    init(name: String? = nil, fields: [String: FirestoreStringValue]) {
+    init(name: String? = nil, fields: [String: FirestoreVehicleValue]) {
         self.name = name
         self.fields = fields
     }
@@ -376,6 +401,21 @@ private struct FirestoreUserFields: Codable {
 
 private struct FirestoreStringValue: Codable {
     let stringValue: String
+}
+
+private struct FirestoreVehicleValue: Codable {
+    let stringValue: String?
+    let booleanValue: Bool?
+
+    init(stringValue: String) {
+        self.stringValue = stringValue
+        booleanValue = nil
+    }
+
+    init(booleanValue: Bool) {
+        stringValue = nil
+        self.booleanValue = booleanValue
+    }
 }
 
 private struct FirestoreDoubleValue: Codable {

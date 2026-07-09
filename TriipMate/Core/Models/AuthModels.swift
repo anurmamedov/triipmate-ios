@@ -88,9 +88,16 @@ struct SavedVehicle: Identifiable, Hashable {
     let year: String
     let powerType: String
     let bodyType: String
+    let isDefault: Bool
 
     var displayName: String {
         "\(year) \(make) \(model)".trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    var duplicateKey: String {
+        [make, model, year, powerType, bodyType]
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
+            .joined(separator: "|")
     }
 }
 
