@@ -1814,19 +1814,23 @@ struct RequestDetailRow: View {
     let value: String
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
             Image(systemName: icon)
                 .foregroundStyle(Color.tmGreen)
-                .frame(width: 28)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title)
-                    .font(.caption)
-                    .foregroundStyle(Color.tmSlate)
-                Text(value)
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(Color.tmInk)
-            }
-            Spacer()
+                .font(.subheadline.weight(.semibold))
+                .frame(width: 22)
+            Text(title)
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(Color.tmSlate)
+                .lineLimit(1)
+                .frame(width: 54, alignment: .leading)
+            Text(value)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(Color.tmInk)
+                .lineLimit(1)
+                .minimumScaleFactor(0.72)
+                .frame(maxWidth: .infinity, alignment: .trailing)
+                .layoutPriority(1)
         }
     }
 }
