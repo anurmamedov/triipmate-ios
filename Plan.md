@@ -149,21 +149,98 @@ This plan reflects the active Xcode target as of July 2026. The project now uses
 - Added `./scripts/test-security-rules.sh` for disposable-user Firestore and Storage rule checks.
 - Updated profile emulator testing to use owner-scoped profile photo paths.
 - Still need to replace authenticated collection scans with server-side filtered Firestore queries before fully restricting list reads.
-- Still need Swift unit tests, UI tests, CI builds for pull requests, accessibility checks, offline behavior tests, and multiple iPhone size checks.
+- Still need atomic seat-booking tests so two passengers cannot overbook the same ride at the same time.
+- Still need Swift unit test and UI test targets in Xcode.
+- Still need CI builds for pull requests, accessibility checks, offline behavior tests, and multiple iPhone size checks.
 
 **Done when:** unauthorized operations fail and core local workflows pass automatically.
 
-## 15. Production Preparation `[ ]`
+## 15. Complete Account Tools and Settings `[~]`
+
+- Identity and license, payment methods, trip alerts, support, passenger requests, and payout setup now open from Profile with usable local UI.
+- Passenger requests are connected to Firestore-backed driver request decisions.
+- Identity/license, payment methods, trip alerts, support forms, and payout setup are still stored locally or shown as prototype flows.
+- Add Firestore schemas for account settings, notification preferences, support tickets, payout setup status, and verification status.
+- Persist account-tool changes per authenticated user instead of using device-only `AppStorage`.
+- Add loading, validation, save, error, and success states for each tool page.
+- Decide which fields are local-only, which are user-editable, and which must be controlled by an admin/provider.
+
+**Done when:** every Profile tool opens, saves the correct data for the logged-in user, reloads after logout/login, and clearly avoids fake production payment or verification promises.
+
+## 16. Trust, Safety, Verification, and Ratings `[ ]`
+
+- Build a real identity and driver verification workflow.
+- Choose a KYC/license provider or define an admin-review process for local/staging.
+- Add ratings and reviews after completed trips.
+- Update persisted `ratingAverage`, `ratingCount`, `completedTripCount`, and verification fields from real workflows.
+- Add report, block, and unsafe-ride flows for passengers and drivers.
+- Add cancellation rules, late-cancellation states, and visible policy text.
+- Add moderation/admin review requirements before production.
+
+**Done when:** trust badges, ratings, verification, and safety actions are based on real state instead of manually seeded profile fields.
+
+## 17. Payments, Payouts, and Receipts `[ ]`
+
+- Choose the payment approach: cash-only MVP, Stripe, Stripe Connect, Apple Pay, or another provider.
+- Add payment authorization or collection only after a driver accepts a passenger request.
+- Add driver payout onboarding and payout status.
+- Store only provider tokens/statuses, never raw card or bank data.
+- Add receipts, refunds, cancellation fees, and disputed-payment states.
+- Add currency handling for USD/CAD across ride price, saved amount, payment, payout, and receipts.
+
+**Done when:** passengers can pay safely, drivers can receive payouts safely, and no sensitive payment data is stored directly in Firestore.
+
+## 18. Notifications and Background Updates `[ ]`
+
+- Add local notification permission flow and in-app alert preferences.
+- Add APNs/Firebase Cloud Messaging for accepted/declined requests, new messages, ride reminders, cancellations, and payout/payment updates.
+- Add badge counts for unread messages and pending driver requests.
+- Replace polling-only message refresh with a production-ready listener or push-triggered refresh.
+- Add notification deep links to the relevant ride, request, trip, or chat.
+
+**Done when:** users receive timely updates without keeping the app open.
+
+## 19. Backend/API and Cloud Functions `[ ]`
+
+- Decide which operations should move from the iOS client to trusted backend code.
+- Add Cloud Functions or an API for privileged actions such as accepting requests, seat count updates, payment webhooks, payouts, verification callbacks, support tickets, and notification sending.
+- Make ride acceptance transactional so request status, trip creation, conversation creation, and seat count update succeed or fail together.
+- Add server-side validation for statuses, ownership, timestamps, price, seats, and payment/payout state.
+- Add admin-only operations for support, moderation, verification, refunds, and account review.
+
+**Done when:** sensitive marketplace operations are no longer trusted only to the iOS client.
+
+## 20. Production Firebase and Environment Configuration `[ ]`
 
 - Separate local, staging, and production configurations.
 - Add production Firebase configuration securely.
 - Ensure Release builds cannot connect to local emulators.
-- Decide whether a separate API is needed for payments and privileged operations.
-- Add analytics, crash reporting, privacy controls, and account deletion.
-- Prepare App Store assets, permissions, policies, and release testing.
+- Add build configuration guards for emulator hosts, project IDs, bundle IDs, and feature flags.
+- Add staging data rules and seed data for teammate testing.
+- Keep local emulator exports out of accidental production workflows.
 
 **Done when:** the app is ready for controlled staging distribution without exposing local configuration or test data.
 
+## 21. Observability, Privacy, and Account Lifecycle `[ ]`
+
+- Add crash reporting and basic analytics for key funnels: register, publish ride, search, request, accept, message, cancel.
+- Add privacy controls for profile photo, phone, email, and ride/contact visibility.
+- Add account deletion, data export, and session revocation.
+- Add log redaction so tokens, phone numbers, and payment/identity details are not exposed.
+- Add clear privacy policy and terms links in Profile/Support.
+
+**Done when:** the app can be operated and debugged responsibly without exposing user data.
+
+## 22. App Store and Release QA `[~]`
+
+- Added the TriipMate app icon to the Xcode asset catalog.
+- Still need launch screen polish, App Store screenshots, app description, privacy nutrition labels, and permission copy.
+- Test all main flows on small, standard, and large iPhone simulators.
+- Test fresh install, logout/login, emulator restart, poor network/offline, dark mode if supported, dynamic type, and VoiceOver basics.
+- Add a final manual release checklist for passenger and driver flows.
+
+**Done when:** a staging/TestFlight build can be handed to real testers with a clear checklist and known limitations.
+
 ## Recommended Next Work
 
-Continue stage **14** next. Ownership writes now have local security checks; the next priority is replacing collection scans with filtered Firestore queries and adding Swift unit/UI test targets.
+Continue stage **14** first. The highest-impact next change is replacing collection scans with filtered Firestore queries and adding automated Swift tests. After that, stage **15** should persist Profile tools to Firestore, and stage **19** should move seat booking and driver decisions into a transactional backend/API path.
