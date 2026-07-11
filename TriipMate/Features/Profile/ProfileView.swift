@@ -176,9 +176,24 @@ struct ProfileView: View {
                             SettingsRow(icon: "person.2.badge.gearshape.fill", title: "Passenger requests")
                             SettingsRow(icon: "dollarsign.circle.fill", title: "Payout setup")
                         } else {
-                            SettingsRow(icon: "ticket.fill", title: "Saved trips")
-                            SettingsRow(icon: "clock.arrow.circlepath", title: "Ride history")
-                            SettingsRow(icon: "slider.horizontal.3", title: "Travel preferences")
+                            NavigationLink {
+                                PassengerSavedTripsToolView()
+                            } label: {
+                                SettingsRow(icon: "ticket.fill", title: "Saved trips")
+                            }
+                            .buttonStyle(.plain)
+                            NavigationLink {
+                                PassengerRideHistoryToolView()
+                            } label: {
+                                SettingsRow(icon: "clock.arrow.circlepath", title: "Ride history")
+                            }
+                            .buttonStyle(.plain)
+                            NavigationLink {
+                                TravelPreferencesView()
+                            } label: {
+                                SettingsRow(icon: "slider.horizontal.3", title: "Travel preferences")
+                            }
+                            .buttonStyle(.plain)
                         }
                     }
                     .padding(16)
@@ -1039,5 +1054,324 @@ struct SettingsRow: View {
                 .font(.caption.weight(.bold))
                 .foregroundStyle(Color.tmSlate)
         }
+    }
+}
+
+struct PassengerSavedTripsToolView: View {
+    @EnvironmentObject private var session: AppSession
+
+    private var activeTrips: [PassengerToolTrip] {
+        let tripItems = session.passengerTrips
+            .filter { [.accepted, .active].contains($0.status) }
+            .map(PassengerToolTrip.trip)
+        let pendingItems = session.passengerRideRequests
+            .filter { $0.status == .pending }
+            .map(PassengerToolTrip.request)
+        return (tripItems + pendingItems).sorted { $0.sortDate > $1.sortDate }
+    }
+
+    var body: some View {
+        PassengerToolListView(
+            title: "Saved trips",
+            icon: "ticket.fill",
+            items: activeTrips,
+            emptyTitle: "No saved trips yet",
+            emptyDetail: "Pending and accepted rides will appear here for quick access.",
+            isLoading: session.isPassengerTripsLoading
+        )
+        .task {
+            await session.loadPassengerTrips()
+        }
+        .refreshable {
+            await session.loadPassengerTrips()
+        }
+    }
+}
+
+struct PassengerRideHistoryToolView: View {
+    @EnvironmentObject private var session: AppSession
+
+    private var historyItems: [PassengerToolTrip] {
+        let tripItems = session.passengerTrips
+            .filter { [.completed, .cancelled, .declined].contains($0.status) }
+            .map(PassengerToolTrip.trip)
+        let requestItems = session.passengerRideRequests
+            .filter { [.accepted, .declined, .cancelled, .expired].contains($0.status) }
+            .map(PassengerToolTrip.request)
+        return (tripItems + requestItems).sorted { $0.sortDate > $1.sortDate }
+    }
+
+    var body: some View {
+        PassengerToolListView(
+            title: "Ride history",
+            icon: "clock.arrow.circlepath",
+            items: historyItems,
+            emptyTitle: "No ride history yet",
+            emptyDetail: "Completed, cancelled, and declined rides will appear here.",
+            isLoading: session.isPassengerTripsLoading
+        )
+        .task {
+            await session.loadPassengerTrips()
+        }
+        .refreshable {
+            await session.loadPassengerTrips()
+        }
+    }
+}
+
+private struct PassengerToolListView: View {
+    let title: String
+    let icon: String
+    let items: [PassengerToolTrip]
+    let emptyTitle: String
+    let emptyDetail: String
+    let isLoading: Bool
+
+    var body: some View {
+        ScrollView {
+            VStack(spacing: 14) {
+                if isLoading && items.isEmpty {
+                    ProgressView()
+                        .tint(Color.tmGreen)
+                        .padding(.top, 42)
+                } else if items.isEmpty {
+                    PassengerToolEmptyState(icon: icon, title: emptyTitle, detail: emptyDetail)
+                        .padding(.top, 24)
+                } else {
+                    ForEach(items) { item in
+                        PassengerToolTripCard(item: item)
+                    }
+                }
+            }
+            .padding(20)
+        }
+        .background(Color.tmMist.ignoresSafeArea())
+        .navigationTitle(title)
+        .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+private struct PassengerToolTripCard: View {
+    let item: PassengerToolTrip
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 12) {
+                Image(systemName: item.icon)
+                    .foregroundStyle(item.tint)
+                    .frame(width: 40, height: 40)
+                    .background(item.tint.opacity(0.14))
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(item.statusTitle)
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(item.tint)
+                    Text(item.title)
+                        .font(.headline)
+                        .foregroundStyle(Color.tmInk)
+                        .lineLimit(1)
+                    Text(item.detail)
+                        .font(.subheadline)
+                        .foregroundStyle(Color.tmSlate)
+                        .lineLimit(2)
+                }
+
+                Spacer()
+            }
+
+            HStack(spacing: 12) {
+                Label("\(item.seats) seat\(item.seats == 1 ? "" : "s")", systemImage: "person.2.fill")
+                Label(item.priceSummary, systemImage: "dollarsign.circle.fill")
+                Spacer()
+            }
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(Color.tmSlate)
+        }
+        .padding(16)
+        .background(.white)
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .overlay {
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(Color.tmLine, lineWidth: 1)
+        }
+    }
+}
+
+private struct PassengerToolEmptyState: View {
+    let icon: String
+    let title: String
+    let detail: String
+
+    var body: some View {
+        VStack(spacing: 14) {
+            Image(systemName: icon)
+                .font(.system(size: 32, weight: .semibold))
+                .foregroundStyle(Color.tmGreen)
+                .frame(width: 68, height: 68)
+                .background(Color.tmGreen.opacity(0.12))
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+            Text(title)
+                .font(.headline)
+                .foregroundStyle(Color.tmInk)
+            Text(detail)
+                .font(.subheadline)
+                .foregroundStyle(Color.tmSlate)
+                .multilineTextAlignment(.center)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(24)
+        .background(.white)
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+}
+
+private struct PassengerToolTrip: Identifiable {
+    let id: String
+    let statusTitle: String
+    let tint: Color
+    let icon: String
+    let title: String
+    let detail: String
+    let seats: Int
+    let priceSummary: String
+    let sortDate: Date
+
+    static func trip(_ trip: PassengerTrip) -> PassengerToolTrip {
+        PassengerToolTrip(
+            id: "trip-\(trip.id)",
+            statusTitle: trip.status.profileDisplayTitle,
+            tint: trip.status.profileTint,
+            icon: trip.status.profileIcon,
+            title: "\(trip.rideSnapshot.from.displayName) -> \(trip.rideSnapshot.to.displayName)",
+            detail: "\(trip.rideSnapshot.departureAt.date.profileDateLabel) with \(trip.rideSnapshot.driverDisplayName)",
+            seats: trip.seats,
+            priceSummary: CurrencySupport.format(cents: trip.rideSnapshot.pricePerSeatCents, regionCode: trip.rideSnapshot.from.state),
+            sortDate: trip.updatedAt.date
+        )
+    }
+
+    static func request(_ request: JoinRideRequest) -> PassengerToolTrip {
+        PassengerToolTrip(
+            id: "request-\(request.id)",
+            statusTitle: request.status.profileDisplayTitle,
+            tint: request.status.profileTint,
+            icon: request.status.profileIcon,
+            title: "Ride request",
+            detail: request.status == .pending ? "Waiting for the driver to respond." : "Request \(request.status.profileDisplayTitle.lowercased()).",
+            seats: request.seatsRequested,
+            priceSummary: CurrencySupport.format(cents: request.pricePerSeatCents, countryCode: nil),
+            sortDate: request.updatedAt.date
+        )
+    }
+}
+
+struct TravelPreferencesView: View {
+    @AppStorage("travelPreferenceSeatCount") private var seatCount = 1
+    @AppStorage("travelPreferenceLuggage") private var luggageAllowed = true
+    @AppStorage("travelPreferencePets") private var petsAllowed = false
+    @AppStorage("travelPreferenceSmoking") private var smokingAllowed = false
+    @AppStorage("travelPreferenceQuietRide") private var quietRide = false
+    @AppStorage("travelPreferencePickupRadius") private var pickupRadius = 10.0
+
+    var body: some View {
+        Form {
+            Section("Ride defaults") {
+                Stepper("Seats: \(seatCount)", value: $seatCount, in: 1...6)
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        Text("Pickup radius")
+                        Spacer()
+                        Text("\(Int(pickupRadius)) km")
+                            .foregroundStyle(Color.tmSlate)
+                    }
+                    Slider(value: $pickupRadius, in: 1...50, step: 1)
+                        .tint(Color.tmGreen)
+                }
+            }
+
+            Section("Comfort") {
+                Toggle("Luggage allowed", isOn: $luggageAllowed)
+                Toggle("Open to pets", isOn: $petsAllowed)
+                Toggle("Open to smoking stops", isOn: $smokingAllowed)
+                Toggle("Prefer quiet rides", isOn: $quietRide)
+            }
+
+            Section {
+                Label("These preferences stay on this device for now and will be used as defaults in future passenger flows.", systemImage: "info.circle.fill")
+                    .font(.footnote)
+                    .foregroundStyle(Color.tmSlate)
+            }
+        }
+        .scrollContentBackground(.hidden)
+        .background(Color.tmMist)
+        .navigationTitle("Travel preferences")
+        .navigationBarTitleDisplayMode(.inline)
+        .tint(Color.tmGreen)
+    }
+}
+
+private extension TripStatus {
+    var profileDisplayTitle: String {
+        switch self {
+        case .pending: "Pending"
+        case .accepted: "Accepted"
+        case .active: "Active"
+        case .completed: "Completed"
+        case .declined: "Declined"
+        case .cancelled: "Cancelled"
+        }
+    }
+
+    var profileTint: Color {
+        switch self {
+        case .pending: Color.tmAmber
+        case .accepted, .active: Color.tmGreen
+        case .completed: Color.tmInk
+        case .declined, .cancelled: Color.tmSlate
+        }
+    }
+
+    var profileIcon: String {
+        switch self {
+        case .pending: "hourglass"
+        case .accepted, .active: "checkmark.seal.fill"
+        case .completed: "flag.checkered"
+        case .declined, .cancelled: "xmark.circle.fill"
+        }
+    }
+}
+
+private extension RideRequestStatus {
+    var profileDisplayTitle: String {
+        switch self {
+        case .pending: "Pending"
+        case .accepted: "Accepted"
+        case .declined: "Declined"
+        case .cancelled: "Cancelled"
+        case .expired: "Expired"
+        }
+    }
+
+    var profileTint: Color {
+        switch self {
+        case .pending: Color.tmAmber
+        case .accepted: Color.tmGreen
+        case .declined, .cancelled, .expired: Color.tmSlate
+        }
+    }
+
+    var profileIcon: String {
+        switch self {
+        case .pending: "hourglass"
+        case .accepted: "checkmark.seal.fill"
+        case .declined, .cancelled, .expired: "xmark.circle.fill"
+        }
+    }
+}
+
+private extension Date {
+    var profileDateLabel: String {
+        formatted(.dateTime.month(.abbreviated).day().hour().minute())
     }
 }
