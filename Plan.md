@@ -126,13 +126,13 @@ This plan reflects the active Xcode target as of July 2026. The project now uses
 
 **Done when:** passengers see an accurate Firestore-backed history and current trip state.
 
-## 13. Build Real-Time Messaging `[~]`
+## 13. Build Real-Time Messaging `[x]`
 
-- Replace sample conversations and messages.
-- Create chats only for involved passengers and drivers.
-- Add real-time Firestore listeners.
-- Add timestamps, unread counts, and read status.
-- Decide message retention, blocking, and reporting behavior.
+- Replaced sample conversations and messages with Firestore-backed ride conversations.
+- Create chats only for involved passengers and drivers after accepted ride requests.
+- Added automatic local refresh while the inbox or chat screen is open.
+- Added timestamps, unread counts, read-on-open behavior, empty states, and send states.
+- Backfilled missing conversations for already accepted local ride requests.
 
 **Done when:** two local accounts can exchange messages and see updates without refreshing.
 
@@ -161,4 +161,4 @@ This plan reflects the active Xcode target as of July 2026. The project now uses
 
 ## Recommended Next Work
 
-Complete stage **13** next. Ride publishing, search, requests, driver decisions, and passenger trip history now use Firestore; the next marketplace workflow is replacing sample messages with real-time Firestore conversations between involved passengers and drivers.
+Complete stage **14** next. The main marketplace workflows now use local Firestore; the next priority is tightening Firestore/Storage rules and adding automated emulator tests for unauthorized access and core ride flows.

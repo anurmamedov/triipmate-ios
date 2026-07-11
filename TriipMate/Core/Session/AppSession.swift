@@ -14,6 +14,8 @@ final class AppSession: ObservableObject {
     @Published var passengerRideRequests: [JoinRideRequest] = []
     @Published var passengerTrips: [PassengerTrip] = []
     @Published var driverRideRequests: [JoinRideRequest] = []
+    @Published var conversations: [RideConversation] = []
+    @Published var messagesByConversationId: [String: [RideMessage]] = [:]
     @Published var authError: String?
     @Published var authNotice: String?
     @Published var isAuthWorking = false
@@ -30,6 +32,9 @@ final class AppSession: ObservableObject {
     @Published var isRideRequestWorking = false
     @Published var isPassengerTripsLoading = false
     @Published var isDriverRequestsLoading = false
+    @Published var isConversationsLoading = false
+    @Published var isMessagesLoading = false
+    @Published var isMessageSending = false
 
     private let authService = LocalFirebaseAuthService()
     private let sessionStore = AuthSessionStore()
@@ -39,6 +44,7 @@ final class AppSession: ObservableObject {
     private let rideService = LocalFirestoreRideService()
     private let rideRequestService = LocalFirestoreRideRequestService()
     private let passengerTripService = LocalFirestorePassengerTripService()
+    private let messagingService = LocalFirestoreMessagingService()
 
     init() {
         Task { await restoreSession() }
@@ -103,6 +109,8 @@ final class AppSession: ObservableObject {
         passengerRideRequests = []
         passengerTrips = []
         driverRideRequests = []
+        conversations = []
+        messagesByConversationId = [:]
         isAuthenticated = false
         authError = nil
         authNotice = nil
@@ -676,9 +684,17 @@ final class AppSession: ObservableObject {
             try await rideService.save(updatedRide, idToken: authUser.idToken)
             try await rideRequestService.save(updatedRequest, idToken: authUser.idToken)
             try await passengerTripService.save(trip, idToken: authUser.idToken)
+            try await messagingService.saveConversation(
+                RideConversation.acceptedRideConversation(
+                    request: updatedRequest,
+                    ride: ride
+                ),
+                idToken: authUser.idToken
+            )
             replaceDriverRide(updatedRide)
             replaceDriverRequest(updatedRequest)
             replaceSearchableRide(updatedRide)
+            conversations = (try? await messagingService.fetchConversations(uid: authUser.uid, idToken: authUser.idToken)) ?? conversations
             return true
         } catch {
             authError = error.localizedDescription
@@ -705,6 +721,109 @@ final class AppSession: ObservableObject {
             let updatedRequest = request.updated(status: .declined)
             try await rideRequestService.save(updatedRequest, idToken: authUser.idToken)
             replaceDriverRequest(updatedRequest)
+            return true
+        } catch {
+            authError = error.localizedDescription
+            return false
+        }
+    }
+
+    func loadConversations() async {
+        guard let authUser else {
+            authError = "Please log in before loading messages."
+            return
+        }
+
+        isConversationsLoading = true
+        authError = nil
+        defer { isConversationsLoading = false }
+
+        do {
+            conversations = try await messagingService.fetchConversations(uid: authUser.uid, idToken: authUser.idToken)
+            try await createMissingAcceptedRideConversations(idToken: authUser.idToken)
+            conversations = try await messagingService.fetchConversations(uid: authUser.uid, idToken: authUser.idToken)
+        } catch {
+            authError = error.localizedDescription
+        }
+    }
+
+    func refreshConversationsSilently() async {
+        guard let authUser else { return }
+        conversations = (try? await messagingService.fetchConversations(uid: authUser.uid, idToken: authUser.idToken)) ?? conversations
+    }
+
+    func loadMessages(for conversation: RideConversation, markRead: Bool = true) async {
+        guard let authUser else {
+            authError = "Please log in before loading messages."
+            return
+        }
+
+        guard conversation.participantUids.contains(authUser.uid) else {
+            authError = "You can only open conversations you are part of."
+            return
+        }
+
+        isMessagesLoading = true
+        authError = nil
+        defer { isMessagesLoading = false }
+
+        do {
+            messagesByConversationId[conversation.id] = try await messagingService.fetchMessages(
+                conversationId: conversation.id,
+                idToken: authUser.idToken
+            )
+
+            if markRead {
+                let updatedConversation = try await messagingService.markRead(
+                    conversation: conversation,
+                    uid: authUser.uid,
+                    idToken: authUser.idToken
+                )
+                replaceConversation(updatedConversation)
+            }
+        } catch {
+            authError = error.localizedDescription
+        }
+    }
+
+    func refreshMessagesSilently(for conversation: RideConversation) async {
+        guard let authUser else { return }
+        guard conversation.participantUids.contains(authUser.uid) else { return }
+
+        if let messages = try? await messagingService.fetchMessages(conversationId: conversation.id, idToken: authUser.idToken) {
+            messagesByConversationId[conversation.id] = messages
+        }
+
+        if let freshConversation = (try? await messagingService.fetchConversations(uid: authUser.uid, idToken: authUser.idToken))?
+            .first(where: { $0.id == conversation.id }) {
+            replaceConversation(freshConversation)
+        }
+    }
+
+    func sendMessage(_ body: String, in conversation: RideConversation) async -> Bool {
+        guard let authUser else {
+            authError = "Please log in before sending messages."
+            return false
+        }
+
+        guard conversation.participantUids.contains(authUser.uid) else {
+            authError = "You can only message people connected to your ride."
+            return false
+        }
+
+        isMessageSending = true
+        authError = nil
+        defer { isMessageSending = false }
+
+        do {
+            let message = try await messagingService.sendMessage(
+                body: body,
+                conversation: conversation,
+                senderUid: authUser.uid,
+                idToken: authUser.idToken
+            )
+            messagesByConversationId[conversation.id, default: []].append(message)
+            conversations = try await messagingService.fetchConversations(uid: authUser.uid, idToken: authUser.idToken)
             return true
         } catch {
             authError = error.localizedDescription
@@ -778,6 +897,7 @@ final class AppSession: ObservableObject {
         passengerRideRequests = (try? await rideRequestService.fetchPassengerRequests(uid: authUser.uid, idToken: authUser.idToken)) ?? []
         passengerTrips = (try? await passengerTripService.fetchPassengerTrips(uid: authUser.uid, idToken: authUser.idToken)) ?? []
         driverRideRequests = (try? await rideRequestService.fetchDriverRequests(rideIds: Set(driverRides.map(\.id)), idToken: authUser.idToken)) ?? []
+        conversations = (try? await messagingService.fetchConversations(uid: authUser.uid, idToken: authUser.idToken)) ?? []
         isAuthenticated = true
     }
 
@@ -821,6 +941,39 @@ final class AppSession: ObservableObject {
             searchableRides[index] = ride
         }
         searchableRides.removeAll { $0.availableSeats <= 0 || ![.published, .active].contains($0.status) }
+    }
+
+    private func replaceConversation(_ conversation: RideConversation) {
+        if let index = conversations.firstIndex(where: { $0.id == conversation.id }) {
+            conversations[index] = conversation
+        } else {
+            conversations.append(conversation)
+        }
+        conversations.sort {
+            ($0.lastMessageAt?.date ?? $0.updatedAt.date) > ($1.lastMessageAt?.date ?? $1.updatedAt.date)
+        }
+    }
+
+    private func createMissingAcceptedRideConversations(idToken: String) async throws {
+        let existingRequestIds = Set(conversations.compactMap(\.requestId))
+        let acceptedDriverRequests = driverRideRequests.filter { $0.status == .accepted && !existingRequestIds.contains($0.id) }
+
+        for request in acceptedDriverRequests {
+            guard let ride = driverRides.first(where: { $0.id == request.rideId }) else { continue }
+            try await messagingService.saveConversation(
+                RideConversation.acceptedRideConversation(request: request, ride: ride),
+                idToken: idToken
+            )
+        }
+
+        let acceptedPassengerRequests = passengerRideRequests.filter { $0.status == .accepted && !existingRequestIds.contains($0.id) }
+        for request in acceptedPassengerRequests {
+            guard let trip = passengerTrips.first(where: { $0.requestId == request.id }) else { continue }
+            try await messagingService.saveConversation(
+                RideConversation.acceptedRideConversation(request: request, trip: trip),
+                idToken: idToken
+            )
+        }
     }
 
     private func validateVehicle(_ vehicle: SavedVehicle) -> Bool {
@@ -948,6 +1101,91 @@ extension PassengerTrip {
     }
 }
 
+extension RideConversation {
+    static func acceptedRideConversation(request: JoinRideRequest, ride: MarketplaceRide) -> RideConversation {
+        let now = FirestoreTimestamp(date: Date())
+        let participantUids = [ride.driverUid, request.passengerUid].uniqued()
+        return RideConversation(
+            id: "\(ride.id)_\(request.id)",
+            rideId: ride.id,
+            requestId: request.id,
+            participantUids: participantUids,
+            driverUid: ride.driverUid,
+            passengerUid: request.passengerUid,
+            driverDisplayName: ride.driverDisplayName,
+            passengerDisplayName: request.passengerDisplayName,
+            routeTitle: "\(ride.from.displayName) -> \(ride.to.displayName)",
+            lastMessagePreview: "Ride request accepted. You can chat here.",
+            lastMessageAt: now,
+            unreadCountsByUid: Self.unreadCounts(driverUid: ride.driverUid, passengerUid: request.passengerUid),
+            status: .active,
+            createdAt: now,
+            updatedAt: now
+        )
+    }
+
+    static func acceptedRideConversation(request: JoinRideRequest, trip: PassengerTrip) -> RideConversation {
+        let now = FirestoreTimestamp(date: Date())
+        let participantUids = [trip.driverUid, trip.passengerUid].uniqued()
+        return RideConversation(
+            id: "\(trip.rideId)_\(request.id)",
+            rideId: trip.rideId,
+            requestId: request.id,
+            participantUids: participantUids,
+            driverUid: trip.driverUid,
+            passengerUid: trip.passengerUid,
+            driverDisplayName: trip.rideSnapshot.driverDisplayName,
+            passengerDisplayName: request.passengerDisplayName,
+            routeTitle: "\(trip.rideSnapshot.from.displayName) -> \(trip.rideSnapshot.to.displayName)",
+            lastMessagePreview: "Ride request accepted. You can chat here.",
+            lastMessageAt: now,
+            unreadCountsByUid: Self.unreadCounts(driverUid: trip.driverUid, passengerUid: trip.passengerUid),
+            status: .active,
+            createdAt: now,
+            updatedAt: now
+        )
+    }
+
+    private static func unreadCounts(driverUid: String, passengerUid: String) -> [String: Int] {
+        guard driverUid != passengerUid else {
+            return [driverUid: 0]
+        }
+        return [
+            driverUid: 0,
+            passengerUid: 1
+        ]
+    }
+
+    func updated(
+        lastMessagePreview: String? = nil,
+        lastMessageAt: FirestoreTimestamp? = nil,
+        unreadCountsByUid: [String: Int]? = nil,
+        status: ConversationStatus? = nil
+    ) -> RideConversation {
+        RideConversation(
+            id: id,
+            rideId: rideId,
+            requestId: requestId,
+            participantUids: participantUids,
+            driverUid: driverUid,
+            passengerUid: passengerUid,
+            driverDisplayName: driverDisplayName,
+            passengerDisplayName: passengerDisplayName,
+            routeTitle: routeTitle,
+            lastMessagePreview: lastMessagePreview ?? self.lastMessagePreview,
+            lastMessageAt: lastMessageAt ?? self.lastMessageAt,
+            unreadCountsByUid: unreadCountsByUid ?? self.unreadCountsByUid,
+            status: status ?? self.status,
+            createdAt: createdAt,
+            updatedAt: FirestoreTimestamp(date: Date())
+        )
+    }
+
+    func otherParticipantName(for uid: String) -> String {
+        uid == driverUid ? passengerDisplayName : driverDisplayName
+    }
+}
+
 private extension RideStatus {
     var passengerTripStatus: TripStatus? {
         switch self {
@@ -960,5 +1198,12 @@ private extension RideStatus {
         case .draft, .published, .full:
             return nil
         }
+    }
+}
+
+private extension Array where Element: Hashable {
+    func uniqued() -> [Element] {
+        var seen = Set<Element>()
+        return filter { seen.insert($0).inserted }
     }
 }

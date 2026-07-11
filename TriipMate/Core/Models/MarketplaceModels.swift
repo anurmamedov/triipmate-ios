@@ -186,6 +186,9 @@ struct RideConversation: Identifiable, Codable, Hashable {
     let participantUids: [String]
     let driverUid: String
     let passengerUid: String
+    let driverDisplayName: String
+    let passengerDisplayName: String
+    let routeTitle: String
     let lastMessagePreview: String?
     let lastMessageAt: FirestoreTimestamp?
     let unreadCountsByUid: [String: Int]
