@@ -141,15 +141,15 @@ This plan reflects the active Xcode target as of July 2026. The project now uses
 
 **Done when:** two local accounts can exchange messages and see updates without refreshing.
 
-## 14. Security and Automated Testing `[ ]`
+## 14. Security and Automated Testing `[~]`
 
-- Restrict profiles and vehicles to their owners.
-- Restrict ride editing to the driver.
-- Restrict requests and conversations to involved users.
-- Restrict profile-photo paths to their owners.
-- Add Firestore and Storage emulator rule tests.
-- Add unit tests, UI tests, and CI builds for pull requests.
-- Test accessibility, offline behavior, and multiple iPhone sizes.
+- Restricted profile and vehicle reads/writes to their owners.
+- Restricted ride, request, trip, conversation, and message writes to the owning or involved users.
+- Restricted profile-photo uploads/downloads to `profilePhotos/{uid}.jpg`.
+- Added `./scripts/test-security-rules.sh` for disposable-user Firestore and Storage rule checks.
+- Updated profile emulator testing to use owner-scoped profile photo paths.
+- Still need to replace authenticated collection scans with server-side filtered Firestore queries before fully restricting list reads.
+- Still need Swift unit tests, UI tests, CI builds for pull requests, accessibility checks, offline behavior tests, and multiple iPhone size checks.
 
 **Done when:** unauthorized operations fail and core local workflows pass automatically.
 
@@ -166,4 +166,4 @@ This plan reflects the active Xcode target as of July 2026. The project now uses
 
 ## Recommended Next Work
 
-Complete stage **14** next. The main marketplace workflows now use local Firestore; the next priority is tightening Firestore/Storage rules and adding automated emulator tests for unauthorized access and core ride flows.
+Continue stage **14** next. Ownership writes now have local security checks; the next priority is replacing collection scans with filtered Firestore queries and adding Swift unit/UI test targets.
