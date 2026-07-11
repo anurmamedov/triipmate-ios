@@ -906,7 +906,7 @@ private struct DriverRideEditView: View {
                             availableSeats = min(availableSeats, value)
                         }
                     Stepper("Available seats: \(availableSeats)", value: $availableSeats, in: 0...totalSeats)
-                    Stepper("$\(Int(price)) per seat", value: $price, in: 25...1500, step: 1)
+                    Stepper("\(CurrencySupport.format(cents: Int(price.rounded()) * 100, regionCode: ride.from.state)) per seat", value: $price, in: 25...1500, step: 1)
                 }
 
                 Section("Status") {
@@ -1009,7 +1009,7 @@ private extension MarketplaceRide {
     }
 
     var priceSummary: String {
-        "$\(pricePerSeatCents / 100)"
+        CurrencySupport.format(cents: pricePerSeatCents, regionCode: from.state)
     }
 
     private static let shortDateFormatter: DateFormatter = {
@@ -1130,7 +1130,7 @@ private extension RideSnapshot {
     }
 
     var priceSummary: String {
-        "$\(pricePerSeatCents / 100) per seat"
+        "\(CurrencySupport.format(cents: pricePerSeatCents, regionCode: from.state)) per seat"
     }
 
     private static let tripDateFormatter: DateFormatter = {
@@ -1143,6 +1143,10 @@ private extension RideSnapshot {
 private extension JoinRideRequest {
     var createdSummary: String {
         Self.requestDateFormatter.string(from: createdAt.date)
+    }
+
+    var totalPriceSummary: String {
+        CurrencySupport.format(cents: pricePerSeatCents * seatsRequested, countryCode: nil)
     }
 
     private static let requestDateFormatter: DateFormatter = {
@@ -1169,6 +1173,13 @@ struct PassengerTripItem: Identifiable, Hashable {
     var pendingRequest: JoinRideRequest? {
         guard request?.status == .pending else { return nil }
         return request
+    }
+
+    var priceSummary: String {
+        if let rideSnapshot {
+            return CurrencySupport.format(cents: pricePerSeatCents, regionCode: rideSnapshot.from.state)
+        }
+        return CurrencySupport.format(cents: pricePerSeatCents, countryCode: nil)
     }
 
     static func request(_ request: JoinRideRequest) -> PassengerTripItem {
@@ -1225,6 +1236,14 @@ private extension VehicleSnapshot {
 private extension String {
     func emptyFallback(_ value: String) -> String {
         trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? value : self
+    }
+
+    var routeRegionCode: String {
+        components(separatedBy: " to ")
+            .first?
+            .split(separator: ",")
+            .last
+            .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) } ?? ""
     }
 }
 
@@ -1294,7 +1313,7 @@ struct PassengerTripCard: View {
 
             HStack(spacing: 12) {
                 Label("\(item.seats) seat\(item.seats == 1 ? "" : "s")", systemImage: "person.2.fill")
-                Label("$\(item.pricePerSeatCents / 100)", systemImage: "dollarsign.circle.fill")
+                Label(item.priceSummary, systemImage: "dollarsign.circle.fill")
                 Spacer()
                 if item.pendingRequest != nil {
                     Button("Cancel") {
@@ -1371,7 +1390,7 @@ struct PassengerTripDetailView: View {
                     VStack(spacing: 12) {
                         RequestDetailRow(icon: "ticket.fill", title: "Request status", value: request.status.displayTitle)
                         RequestDetailRow(icon: "person.2.fill", title: "Seats requested", value: "\(request.seatsRequested)")
-                        RequestDetailRow(icon: "banknote.fill", title: "Request total", value: "$\((request.pricePerSeatCents * request.seatsRequested) / 100)")
+                        RequestDetailRow(icon: "banknote.fill", title: "Request total", value: request.totalPriceSummary)
                         RequestDetailRow(icon: "clock.fill", title: "Requested", value: request.createdSummary)
                     }
                     .requestDetailSection()
@@ -1565,8 +1584,8 @@ struct DriverJoinRequestDetailView: View {
     private var requestSection: some View {
         VStack(alignment: .leading, spacing: 14) {
             RequestDetailRow(icon: "person.2.fill", title: "Seats requested", value: "\(request.seatsRequested)")
-            RequestDetailRow(icon: "dollarsign.circle.fill", title: "Price", value: "$\(request.pricePerSeatCents / 100) per seat")
-            RequestDetailRow(icon: "banknote.fill", title: "Request total", value: "$\((request.pricePerSeatCents * request.seatsRequested) / 100)")
+            RequestDetailRow(icon: "dollarsign.circle.fill", title: "Price", value: ride.map { "\(CurrencySupport.format(cents: request.pricePerSeatCents, regionCode: $0.from.state)) per seat" } ?? CurrencySupport.format(cents: request.pricePerSeatCents, countryCode: nil))
+            RequestDetailRow(icon: "banknote.fill", title: "Request total", value: ride.map { CurrencySupport.format(cents: request.pricePerSeatCents * request.seatsRequested, regionCode: $0.from.state) } ?? CurrencySupport.format(cents: request.pricePerSeatCents * request.seatsRequested, countryCode: nil))
             RequestDetailRow(icon: "clock.fill", title: "Requested", value: request.createdSummary)
             RequestDetailRow(icon: "suitcase.fill", title: "Luggage", value: request.luggageNote.emptyFallback("Not added"))
         }
@@ -1739,8 +1758,8 @@ struct DriverRequestDetailView: View {
     private var requestSection: some View {
         VStack(alignment: .leading, spacing: 14) {
             RequestDetailRow(icon: "person.2.fill", title: "Seats requested", value: "\(request.seats)")
-            RequestDetailRow(icon: "dollarsign.circle.fill", title: "Price", value: "$\(request.pricePerSeat) per seat")
-            RequestDetailRow(icon: "banknote.fill", title: "Request total", value: "$\(request.pricePerSeat * request.seats)")
+            RequestDetailRow(icon: "dollarsign.circle.fill", title: "Price", value: "\(CurrencySupport.format(dollars: Double(request.pricePerSeat), currencyCode: CurrencySupport.code(forRegionCode: request.route.routeRegionCode))) per seat")
+            RequestDetailRow(icon: "banknote.fill", title: "Request total", value: CurrencySupport.format(dollars: Double(request.pricePerSeat * request.seats), currencyCode: CurrencySupport.code(forRegionCode: request.route.routeRegionCode)))
             RequestDetailRow(icon: "clock.fill", title: "Requested", value: request.requestedAt)
             RequestDetailRow(icon: "suitcase.fill", title: "Luggage", value: request.luggage)
         }

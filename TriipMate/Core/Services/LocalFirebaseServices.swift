@@ -544,6 +544,7 @@ private struct FirestoreUserFields: Codable {
     let lastName: FirestoreStringValue
     let email: FirestoreStringValue
     let phone: FirestoreStringValue
+    let countryCode: FirestoreStringValue?
     let role: FirestoreStringValue
     let profilePhotoPath: FirestoreStringValue?
     let ratingAverage: FirestoreDoubleValue?
@@ -559,6 +560,7 @@ private struct FirestoreUserFields: Codable {
         lastName = FirestoreStringValue(stringValue: profile.lastName)
         email = FirestoreStringValue(stringValue: profile.email)
         phone = FirestoreStringValue(stringValue: profile.phone)
+        countryCode = FirestoreStringValue(stringValue: profile.countryCode)
         role = FirestoreStringValue(stringValue: profile.role.rawValue)
         profilePhotoPath = profile.profilePhotoPath.map(FirestoreStringValue.init(stringValue:))
         ratingAverage = profile.ratingAverage.map(FirestoreDoubleValue.init(doubleValue:))
@@ -577,6 +579,7 @@ private struct FirestoreUserFields: Codable {
             lastName: lastName.stringValue,
             email: email.stringValue,
             phone: phone.stringValue,
+            countryCode: countryCode?.stringValue ?? UserProfile.countryCode(fromPhone: phone.stringValue),
             role: AppRole(rawValue: role.stringValue) ?? .passenger,
             profilePhotoPath: profilePhotoPath?.stringValue,
             ratingAverage: ratingAverage?.doubleValue,

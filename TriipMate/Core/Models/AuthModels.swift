@@ -13,6 +13,7 @@ struct UserProfile {
     let lastName: String
     let email: String
     let phone: String
+    let countryCode: String
     let role: AppRole
     let profilePhotoPath: String?
     let ratingAverage: Double?
@@ -28,6 +29,7 @@ struct UserProfile {
         lastName: String,
         email: String,
         phone: String,
+        countryCode: String = "CA",
         role: AppRole,
         profilePhotoPath: String?,
         ratingAverage: Double? = nil,
@@ -42,6 +44,7 @@ struct UserProfile {
         self.lastName = lastName
         self.email = email
         self.phone = phone
+        self.countryCode = countryCode
         self.role = role
         self.profilePhotoPath = profilePhotoPath
         self.ratingAverage = ratingAverage
@@ -54,11 +57,19 @@ struct UserProfile {
 }
 
 extension UserProfile {
+    static func countryCode(fromPhone phone: String) -> String {
+        if phone.trimmingCharacters(in: .whitespacesAndNewlines).hasPrefix("+1") {
+            return "CA"
+        }
+        return Locale.current.region?.identifier == "US" ? "US" : "CA"
+    }
+
     func updated(
         firstName: String? = nil,
         lastName: String? = nil,
         email: String? = nil,
         phone: String? = nil,
+        countryCode: String? = nil,
         role: AppRole? = nil,
         profilePhotoPath: String? = nil,
         replacesProfilePhotoPath: Bool = false
@@ -69,6 +80,7 @@ extension UserProfile {
             lastName: lastName ?? self.lastName,
             email: email ?? self.email,
             phone: phone ?? self.phone,
+            countryCode: countryCode ?? self.countryCode,
             role: role ?? self.role,
             profilePhotoPath: replacesProfilePhotoPath ? profilePhotoPath : self.profilePhotoPath,
             ratingAverage: ratingAverage,
@@ -79,6 +91,43 @@ extension UserProfile {
             isDriverVerified: isDriverVerified
         )
     }
+}
+
+enum CurrencySupport {
+    static func code(forCountryCode countryCode: String?) -> String {
+        switch countryCode?.uppercased() {
+        case "US":
+            return "USD"
+        case "CA":
+            return "CAD"
+        default:
+            return Locale.current.region?.identifier == "US" ? "USD" : "CAD"
+        }
+    }
+
+    static func code(forRegionCode regionCode: String) -> String {
+        canadianProvinceCodes.contains(regionCode.uppercased()) ? "CAD" : "USD"
+    }
+
+    static func format(cents: Int, countryCode: String?) -> String {
+        format(dollars: Double(cents) / 100, currencyCode: code(forCountryCode: countryCode))
+    }
+
+    static func format(cents: Int, regionCode: String) -> String {
+        format(dollars: Double(cents) / 100, currencyCode: code(forRegionCode: regionCode))
+    }
+
+    static func format(dollars: Double, currencyCode: String) -> String {
+        dollars.formatted(
+            .currency(code: currencyCode)
+                .precision(.fractionLength(0))
+                .presentation(.narrow)
+        )
+    }
+
+    private static let canadianProvinceCodes: Set<String> = [
+        "AB", "BC", "MB", "NB", "NL", "NS", "NT", "NU", "ON", "PE", "QC", "SK", "YT"
+    ]
 }
 
 struct SavedVehicle: Identifiable, Hashable {

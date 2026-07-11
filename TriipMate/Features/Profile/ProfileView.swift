@@ -108,9 +108,7 @@ struct ProfileView: View {
 
     private var savingsValue: String {
         let cents = session.userProfile?.totalSavingsCents ?? 0
-        return (Double(cents) / 100).formatted(
-            .currency(code: "USD").precision(.fractionLength(0))
-        )
+        return CurrencySupport.format(cents: cents, countryCode: session.userProfile?.countryCode)
     }
 
     var body: some View {
@@ -838,9 +836,12 @@ struct EditProfileInformationView: View {
         firstName = profile.firstName
         lastName = profile.lastName
         email = profile.email
+        selectedCountryID = profile.countryCode
         let phoneParts = profile.phone.split(separator: " ", maxSplits: 1).map(String.init)
         if let savedCode = phoneParts.first,
-           let savedCountry = phoneCountries.first(where: { $0.dialCode == savedCode }) {
+           let savedCountry = phoneCountries.first(where: { $0.id == profile.countryCode && $0.dialCode == savedCode })
+            ?? phoneCountries.first(where: { $0.id == profile.countryCode })
+            ?? phoneCountries.first(where: { $0.dialCode == savedCode }) {
             selectedCountryID = savedCountry.id
             phone = phoneParts.count > 1 ? phoneParts[1] : ""
         } else {
@@ -871,7 +872,8 @@ struct EditProfileInformationView: View {
                 firstName: cleanFirstName,
                 lastName: cleanLastName,
                 email: cleanEmail,
-                phone: formattedPhone
+                phone: formattedPhone,
+                countryCode: selectedCountry.id
             )
             guard session.profileError == nil else { return }
 

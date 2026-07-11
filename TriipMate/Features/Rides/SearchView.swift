@@ -198,7 +198,9 @@ struct SearchView: View {
         guard let cheapestRide = filteredRides.first else {
             return "Search real shared rides and compare your seat cost."
         }
-        return "$\(cheapestRide.pricePerSeatCents / 100) per seat instead of about $500 solo"
+        let sharedPrice = CurrencySupport.format(cents: cheapestRide.pricePerSeatCents, regionCode: cheapestRide.from.state)
+        let soloPrice = CurrencySupport.format(dollars: 500, currencyCode: CurrencySupport.code(forRegionCode: cheapestRide.from.state))
+        return "\(sharedPrice) per seat instead of about \(soloPrice) solo"
     }
 
     private var loadingState: some View {

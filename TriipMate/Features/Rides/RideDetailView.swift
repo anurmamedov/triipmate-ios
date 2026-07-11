@@ -112,7 +112,7 @@ struct RideDetailView: View {
                 }
                 Spacer()
                 VStack(alignment: .trailing, spacing: 2) {
-                    Text("$\(ride.price)")
+                    Text(ride.priceSummary)
                         .font(.title2.bold())
                         .foregroundStyle(Color.tmInk)
                     Text("per seat")
@@ -168,7 +168,7 @@ struct RideRequestFormView: View {
                 Section("Ride") {
                     LabeledContent("Route", value: "\(ride.from) to \(ride.to)")
                     LabeledContent("Departure", value: "\(ride.date) at \(ride.time)")
-                    LabeledContent("Seat price", value: "$\(ride.price)")
+                    LabeledContent("Seat price", value: ride.priceSummary)
                 }
 
                 Section("Request") {

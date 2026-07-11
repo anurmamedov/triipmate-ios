@@ -24,6 +24,24 @@ struct Ride: Identifiable, Hashable {
     let notes: String
 }
 
+extension Ride {
+    var priceSummary: String {
+        CurrencySupport.format(dollars: Double(price), currencyCode: CurrencySupport.code(forRegionCode: from.routeRegionCode))
+    }
+
+    var totalPriceSummary: String {
+        CurrencySupport.format(dollars: Double(price * seats), currencyCode: CurrencySupport.code(forRegionCode: from.routeRegionCode))
+    }
+}
+
+private extension String {
+    var routeRegionCode: String {
+        split(separator: ",")
+            .last
+            .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) } ?? ""
+    }
+}
+
 struct MessageThread: Identifiable {
     let id = UUID()
     let name: String

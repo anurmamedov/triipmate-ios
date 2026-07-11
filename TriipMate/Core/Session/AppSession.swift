@@ -74,6 +74,7 @@ final class AppSession: ObservableObject {
                 lastName: values.lastName,
                 email: values.email,
                 phone: values.phone,
+                countryCode: UserProfile.countryCode(fromPhone: values.phone),
                 role: activeRole,
                 profilePhotoPath: nil
             )
@@ -164,7 +165,7 @@ final class AppSession: ObservableObject {
         }
     }
 
-    func updateProfile(firstName: String, lastName: String, email: String, phone: String) async {
+    func updateProfile(firstName: String, lastName: String, email: String, phone: String, countryCode: String? = nil) async {
         guard let currentAuthUser = authUser, let currentProfile = userProfile else {
             profileError = "Please log in before editing your profile."
             return
@@ -195,7 +196,8 @@ final class AppSession: ObservableObject {
                 firstName: values.firstName,
                 lastName: values.lastName,
                 email: values.email,
-                phone: values.phone
+                phone: values.phone,
+                countryCode: countryCode
             )
             try await profileService.save(updatedProfile, idToken: updatedAuthUser.idToken)
             try sessionStore.save(refreshToken: updatedAuthUser.refreshToken)

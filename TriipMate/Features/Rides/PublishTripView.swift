@@ -55,7 +55,7 @@ struct PublishTripView: View {
                             .disabled(price <= 25)
 
                             VStack(spacing: 2) {
-                                Text("$\(Int(price))")
+                                Text(CurrencySupport.format(dollars: price, currencyCode: CurrencySupport.code(forRegionCode: from.routeRegionCode)))
                                     .font(.title2.bold())
                                     .foregroundStyle(Color.tmInk)
                                 Text("per seat")
@@ -227,7 +227,7 @@ struct PublishTripView: View {
         .frame(height: 32)
         .accessibilityElement()
         .accessibilityLabel("Price per seat")
-        .accessibilityValue("$\(Int(price))")
+        .accessibilityValue(CurrencySupport.format(dollars: price, currencyCode: CurrencySupport.code(forRegionCode: from.routeRegionCode)))
         .accessibilityAdjustableAction { direction in
             switch direction {
             case .increment:
@@ -812,6 +812,12 @@ private struct MenuPickerPill: View {
 private extension String {
     var trimmed: String {
         trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    var routeRegionCode: String {
+        split(separator: ",")
+            .last
+            .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) } ?? ""
     }
 }
 
