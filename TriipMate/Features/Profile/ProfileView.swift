@@ -288,14 +288,15 @@ struct ProfileView: View {
             } label: {
                 Image(systemName: "pencil")
                     .font(.subheadline.weight(.bold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(Color.tmGreen)
                     .frame(width: 36, height: 36)
-                    .background(Color.tmGreen)
+                    .background(Color.tmCloud)
                     .clipShape(RoundedRectangle(cornerRadius: 8))
                     .overlay(
                         RoundedRectangle(cornerRadius: 8)
                             .stroke(.white, lineWidth: 2)
                     )
+                    .shadow(color: Color.tmGreen.opacity(0.14), radius: 8, y: 3)
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Edit profile")
@@ -713,14 +714,15 @@ struct EditProfileInformationView: View {
                             } label: {
                                 Image(systemName: "camera.fill")
                                     .font(.subheadline.weight(.bold))
-                                    .foregroundStyle(.white)
+                                    .foregroundStyle(Color.tmGreen)
                                     .frame(width: 36, height: 36)
-                                    .background(Color.tmGreen)
+                                    .background(Color.tmCloud)
                                     .clipShape(RoundedRectangle(cornerRadius: 8))
                                     .overlay {
                                         RoundedRectangle(cornerRadius: 8)
                                             .stroke(.white, lineWidth: 2)
                                     }
+                                    .shadow(color: Color.tmGreen.opacity(0.14), radius: 8, y: 3)
                             }
                             .buttonStyle(.plain)
                             .offset(x: 7, y: 7)
