@@ -798,12 +798,25 @@ private struct DriverRideDetailView: View {
         .background(Color.tmMist.ignoresSafeArea())
         .navigationTitle("Ride details")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Menu {
+                    Button(role: .destructive, action: onDelete) {
+                        Label("Delete ride", systemImage: "trash.fill")
+                    }
+                } label: {
+                    Image(systemName: "ellipsis.circle.fill")
+                        .font(.title3)
+                        .foregroundStyle(Color.tmSlate)
+                }
+                .accessibilityLabel("Ride actions")
+            }
+        }
         .safeAreaInset(edge: .bottom) {
             DriverRideDecisionBar(
                 canChangeRide: ride.status != .completed && ride.status != .cancelled,
                 onEdit: onEdit,
-                onCancel: onCancel,
-                onDelete: onDelete
+                onCancel: onCancel
             )
         }
     }
@@ -813,23 +826,11 @@ private struct DriverRideDecisionBar: View {
     let canChangeRide: Bool
     let onEdit: () -> Void
     let onCancel: () -> Void
-    let onDelete: () -> Void
 
     var body: some View {
-        HStack(spacing: 10) {
-            Button(action: onDelete) {
-                Image(systemName: "trash.fill")
-                    .font(.headline.weight(.bold))
-                    .foregroundStyle(Color.red)
-                    .frame(width: 52, height: 52)
-                    .background(Color.red.opacity(0.12))
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Delete ride")
-
+        HStack(spacing: 12) {
             Button(action: onCancel) {
-                Label("Cancel", systemImage: "xmark.circle.fill")
+                Label("Cancel ride", systemImage: "xmark.circle.fill")
                     .font(.subheadline.weight(.bold))
                     .foregroundStyle(canChangeRide ? Color.tmInk : Color.tmSlate.opacity(0.6))
                     .frame(maxWidth: .infinity)

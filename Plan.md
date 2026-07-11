@@ -41,6 +41,8 @@ This plan reflects the active Xcode target as of July 2026. The project now uses
 - Persist personal information and profile photos through Firestore and Storage.
 - Save passenger/driver mode changes to Firestore before updating the app mode.
 - Load rating, completed-trip, savings, and verification values from profile data instead of samples.
+- Store the user's country selection and use it for profile currency display.
+- Connected passenger profile tools to real Saved trips, Ride history, and Travel preferences screens.
 - Added loading, empty, retry, cached-profile, and offline/error states.
 - Added a disposable-user emulator test for profile fields, role changes, photos, access rules, and cleanup.
 
@@ -71,6 +73,7 @@ This plan reflects the active Xcode target as of July 2026. The project now uses
 - Added validation for route, seats, and vehicle details.
 - Supported saved vehicles and newly entered vehicles.
 - Added an explicit choice before saving a new vehicle to the driver's profile.
+- Added route-aware CAD/USD display for posted ride pricing.
 - Prevented duplicate submissions with a publishing state.
 - Added loading, success, and failure states.
 
@@ -92,6 +95,7 @@ This plan reflects the active Xcode target as of July 2026. The project now uses
 - Hid expired, cancelled, completed, full, and unavailable rides from passenger search.
 - Added loading, empty-results, and retry states.
 - Used normalized city text for route matching.
+- Added route-aware CAD/USD price and savings display.
 
 **Done when:** a ride published by one local user appears correctly in another user’s search results.
 
@@ -123,6 +127,7 @@ This plan reflects the active Xcode target as of July 2026. The project now uses
 - Allow cancellation of eligible pending requests.
 - Create passenger trip documents with preserved ride snapshots when drivers accept requests.
 - Sync accepted passenger trips when driver rides become active, completed, cancelled, or deleted.
+- Exposed focused passenger trip views from Profile through Saved trips and Ride history.
 
 **Done when:** passengers see an accurate Firestore-backed history and current trip state.
 
