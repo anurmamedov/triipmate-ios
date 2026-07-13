@@ -261,12 +261,12 @@ Required timestamp fields should be set when the document is created and updated
 - `decidedAt`
 - `lastMessageAt`
 
-## Next Implementation Step
+## Security Notes
 
-Step 7 should connect the Post Ride screen to `rides/{rideId}` using `MarketplaceRide`. The first real workflow should be:
+Local emulator rules now enforce ownership for profile, vehicle, ride, ride-request, trip, conversation, message, and profile-photo writes. The remaining security hardening item is to replace authenticated collection scans with server-side filtered Firestore queries so reads can be fully limited to public rides or involved users before staging.
 
-1. Driver fills Post Ride.
-2. App validates required fields.
-3. App creates a `MarketplaceRide` with status `published`.
-4. Ride is saved to Firestore.
-5. Restarting the emulator keeps the ride in `firebase-dataok/`.
+Run the disposable security checks with:
+
+```bash
+./scripts/test-security-rules.sh
+```

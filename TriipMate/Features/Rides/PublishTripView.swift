@@ -24,13 +24,14 @@ struct PublishTripView: View {
     @State private var smokingAllowed = false
     @State private var note = ""
     @State private var publishMessage: PublishMessage?
+    @State private var isVehicleSheetPresented = false
 
     var body: some View {
         NavigationStack {
             Form {
                 Section("Route") {
-                    TextField("Leaving from", text: $from)
-                    TextField("Going to", text: $to)
+                    PostRideRouteAutocompleteField(title: "Leaving from", text: $from, icon: "location.fill")
+                    PostRideRouteAutocompleteField(title: "Going to", text: $to, icon: "mappin.and.ellipse")
                     TextField("Pickup point", text: $pickupPoint)
                     TextField("Drop-off point", text: $dropoffPoint)
                 }
@@ -54,7 +55,7 @@ struct PublishTripView: View {
                             .disabled(price <= 25)
 
                             VStack(spacing: 2) {
-                                Text("$\(Int(price))")
+                                Text(CurrencySupport.format(dollars: price, currencyCode: CurrencySupport.code(forRegionCode: from.routeRegionCode)))
                                     .font(.title2.bold())
                                     .foregroundStyle(Color.tmInk)
                                 Text("per seat")
@@ -74,33 +75,34 @@ struct PublishTripView: View {
                 }
 
                 Section("Vehicle") {
-                    if !session.savedVehicles.isEmpty {
-                        Picker("Use vehicle", selection: $selectedVehicleID) {
-                            ForEach(session.savedVehicles) { vehicle in
-                                Text(vehicle.displayName).tag(vehicle.id)
-                            }
-                            Text("Enter new vehicle").tag("new")
-                        }
+                    Button {
+                        isVehicleSheetPresented = true
+                    } label: {
+                        VehicleSummaryCard(
+                            selectedVehicle: selectedVehicle,
+                            carMake: carMake,
+                            carModel: carModel,
+                            carYear: carYear,
+                            powerType: powerType,
+                            bodyType: bodyType
+                        )
                     }
+                    .buttonStyle(.plain)
+                    .listRowInsets(EdgeInsets(top: 8, leading: 0, bottom: 8, trailing: 0))
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
+                }
+                .textCase(nil)
 
-                    if let selectedVehicle {
-                        HStack(spacing: 12) {
-                            Image(systemName: "car.fill")
-                                .font(.title3)
-                                .foregroundStyle(Color.tmGreen)
-                                .frame(width: 32)
-                            VStack(alignment: .leading, spacing: 3) {
-                                Text(selectedVehicle.displayName)
-                                    .font(.body.weight(.semibold))
-                                    .foregroundStyle(Color.tmInk)
-                                Text("\(selectedVehicle.powerType) · \(selectedVehicle.bodyType)")
-                                    .font(.caption)
-                                    .foregroundStyle(Color.tmSlate)
-                            }
+                if selectedVehicle == nil && (!carMake.trimmed.isEmpty || !carModel.trimmed.isEmpty || !carYear.trimmed.isEmpty) {
+                    Section {
+                        HStack(spacing: 10) {
+                            Image(systemName: saveNewVehicle ? "checkmark.seal.fill" : "info.circle.fill")
+                                .foregroundStyle(saveNewVehicle ? Color.tmGreen : Color.tmSlate)
+                            Text(saveNewVehicle ? "This new vehicle will be saved to your profile." : "This new vehicle will be used only for this ride.")
+                                .font(.footnote)
+                                .foregroundStyle(Color.tmSlate)
                         }
-                        .padding(.vertical, 4)
-                    } else {
-                        newVehicleFields
                     }
                 }
 
@@ -124,6 +126,20 @@ struct PublishTripView: View {
             .scrollContentBackground(.hidden)
             .background(Color.tmMist)
             .onAppear(perform: selectDefaultVehicle)
+            .sheet(isPresented: $isVehicleSheetPresented) {
+                VehicleSelectionSheet(
+                    selectedVehicleID: $selectedVehicleID,
+                    carMake: $carMake,
+                    carModel: $carModel,
+                    carYear: $carYear,
+                    powerType: $powerType,
+                    bodyType: $bodyType,
+                    saveNewVehicle: $saveNewVehicle
+                )
+                .environmentObject(session)
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
+            }
             .alert(item: $publishMessage) { message in
                 Alert(
                     title: Text(message.title),
@@ -138,33 +154,9 @@ struct PublishTripView: View {
         session.savedVehicles.first { $0.id == selectedVehicleID }
     }
 
-    @ViewBuilder
-    private var newVehicleFields: some View {
-        TextField("Car make", text: $carMake)
-        TextField("Car model", text: $carModel)
-        TextField("Car year", text: $carYear)
-            .keyboardType(.numberPad)
-            .onChange(of: carYear) { value in
-                carYear = String(value.filter { $0.isNumber }.prefix(4))
-            }
-        Picker("Power type", selection: $powerType) {
-            Text("Fuel").tag("Fuel")
-            Text("Electric").tag("Electric")
-            Text("Hybrid").tag("Hybrid")
-        }
-        Picker("Body type", selection: $bodyType) {
-            Text("Sedan").tag("Sedan")
-            Text("SUV").tag("SUV")
-            Text("Van").tag("Van")
-            Text("Truck").tag("Truck")
-            Text("Hatchback").tag("Hatchback")
-        }
-        Toggle("Save this vehicle to my profile", isOn: $saveNewVehicle)
-    }
-
     private func selectDefaultVehicle() {
-        guard selectedVehicleID == "new", let firstVehicle = session.savedVehicles.first else { return }
-        selectedVehicleID = firstVehicle.id
+        guard selectedVehicleID == "new" else { return }
+        selectedVehicleID = session.savedVehicles.first(where: \.isDefault)?.id ?? session.savedVehicles.first?.id ?? "new"
     }
 
     private var publishAction: some View {
@@ -235,7 +227,7 @@ struct PublishTripView: View {
         .frame(height: 32)
         .accessibilityElement()
         .accessibilityLabel("Price per seat")
-        .accessibilityValue("$\(Int(price))")
+        .accessibilityValue(CurrencySupport.format(dollars: price, currencyCode: CurrencySupport.code(forRegionCode: from.routeRegionCode)))
         .accessibilityAdjustableAction { direction in
             switch direction {
             case .increment:
@@ -327,7 +319,8 @@ struct PublishTripView: View {
                     model: trimmedModel,
                     year: trimmedYear,
                     powerType: powerType,
-                    bodyType: bodyType
+                    bodyType: bodyType,
+                    isDefault: session.savedVehicles.isEmpty
                 )
             }
         }
@@ -415,7 +408,7 @@ struct PublishTripView: View {
         totalSeats = 4
         seats = 2
         price = 120
-        selectedVehicleID = session.savedVehicles.first?.id ?? "new"
+        selectedVehicleID = session.savedVehicles.first(where: \.isDefault)?.id ?? session.savedVehicles.first?.id ?? "new"
         carMake = ""
         carModel = ""
         carYear = ""
@@ -443,9 +436,388 @@ private struct PublishMessage: Identifiable {
     }
 }
 
+private struct VehicleSummaryCard: View {
+    let selectedVehicle: SavedVehicle?
+    let carMake: String
+    let carModel: String
+    let carYear: String
+    let powerType: String
+    let bodyType: String
+
+    private var hasNewVehicleDetails: Bool {
+        !carMake.trimmed.isEmpty || !carModel.trimmed.isEmpty || !carYear.trimmed.isEmpty
+    }
+
+    var body: some View {
+        HStack(spacing: 14) {
+            Image(systemName: "car.fill")
+                .font(.title3.weight(.semibold))
+                .foregroundStyle(Color.tmGreen)
+                .frame(width: 44, height: 44)
+                .background(Color.tmGreen.opacity(0.12))
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+
+            VStack(alignment: .leading, spacing: 5) {
+                Text(title)
+                    .font(.headline)
+                    .foregroundStyle(Color.tmInk)
+                Text(subtitle)
+                    .font(.caption)
+                    .foregroundStyle(Color.tmSlate)
+            }
+
+            Spacer()
+
+            Image(systemName: "chevron.up.chevron.down")
+                .font(.caption.weight(.bold))
+                .foregroundStyle(Color.tmSlate)
+                .frame(width: 28, height: 28)
+                .background(Color.tmCloud)
+                .clipShape(Circle())
+        }
+        .padding(14)
+        .background(.white)
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .overlay {
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(Color.tmLine.opacity(0.9), lineWidth: 1)
+        }
+    }
+
+    private var title: String {
+        if let selectedVehicle {
+            return selectedVehicle.displayName
+        }
+        if hasNewVehicleDetails {
+            return [carYear.trimmed, carMake.trimmed, carModel.trimmed]
+                .filter { !$0.isEmpty }
+                .joined(separator: " ")
+        }
+        return "Choose vehicle"
+    }
+
+    private var subtitle: String {
+        if let selectedVehicle {
+            return selectedVehicle.isDefault ? "\(selectedVehicle.powerType) · \(selectedVehicle.bodyType) · Default" : "\(selectedVehicle.powerType) · \(selectedVehicle.bodyType)"
+        }
+        if hasNewVehicleDetails {
+            return "\(powerType) · \(bodyType) · New vehicle"
+        }
+        return "Select a saved car or add one for this ride"
+    }
+}
+
+private struct VehicleSelectionSheet: View {
+    @EnvironmentObject private var session: AppSession
+    @Environment(\.dismiss) private var dismiss
+    @Binding var selectedVehicleID: String
+    @Binding var carMake: String
+    @Binding var carModel: String
+    @Binding var carYear: String
+    @Binding var powerType: String
+    @Binding var bodyType: String
+    @Binding var saveNewVehicle: Bool
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 20) {
+                    if !session.savedVehicles.isEmpty {
+                        savedVehicleSection
+                    }
+
+                    newVehicleSection
+                }
+                .padding(20)
+            }
+            .background(Color.tmMist.ignoresSafeArea())
+            .navigationTitle("Vehicle")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Done") {
+                        dismiss()
+                    }
+                    .font(.body.weight(.semibold))
+                    .foregroundStyle(Color.tmGreen)
+                }
+            }
+        }
+    }
+
+    private var savedVehicleSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Saved vehicles")
+                .font(.headline)
+                .foregroundStyle(Color.tmInk)
+
+            VStack(spacing: 10) {
+                ForEach(session.savedVehicles) { vehicle in
+                    Button {
+                        withAnimation(.spring(response: 0.28, dampingFraction: 0.86)) {
+                            selectedVehicleID = vehicle.id
+                        }
+                        dismiss()
+                    } label: {
+                        VehicleSheetCard(vehicle: vehicle, isSelected: selectedVehicleID == vehicle.id)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+    }
+
+    private var newVehicleSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text("Add a new vehicle")
+                    .font(.headline)
+                    .foregroundStyle(Color.tmInk)
+                Spacer()
+                if selectedVehicleID == "new" {
+                    Label("Selected", systemImage: "checkmark.circle.fill")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(Color.tmGreen)
+                }
+            }
+
+            VStack(spacing: 12) {
+                VehicleInputRow(title: "Make", placeholder: "Toyota", text: $carMake)
+                VehicleInputRow(title: "Model", placeholder: "Corolla", text: $carModel)
+                VehicleInputRow(title: "Year", placeholder: "2022", text: $carYear, keyboardType: .numberPad)
+                    .onChange(of: carYear) { value in
+                        carYear = String(value.filter { $0.isNumber }.prefix(4))
+                    }
+
+                HStack(spacing: 10) {
+                    MenuPickerPill(title: "Power", selection: $powerType, options: ["Fuel", "Electric", "Hybrid"], icon: "fuelpump.fill")
+                    MenuPickerPill(title: "Body", selection: $bodyType, options: ["Sedan", "SUV", "Van", "Truck", "Hatchback"], icon: "rectangle.3.group.fill")
+                }
+
+                Toggle(isOn: $saveNewVehicle) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Save to profile")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(Color.tmInk)
+                        Text("Use it faster next time")
+                            .font(.caption)
+                            .foregroundStyle(Color.tmSlate)
+                    }
+                }
+                .toggleStyle(.switch)
+                .tint(Color.tmGreen)
+                .padding(12)
+                .background(Color.tmCloud.opacity(0.8))
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+
+                Button {
+                    withAnimation(.spring(response: 0.28, dampingFraction: 0.86)) {
+                        selectedVehicleID = "new"
+                    }
+                    dismiss()
+                } label: {
+                    Label("Use this vehicle", systemImage: "checkmark.circle.fill")
+                        .font(.headline)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 48)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(Color.tmGreen)
+            }
+            .padding(14)
+            .background(.white)
+            .clipShape(RoundedRectangle(cornerRadius: 8))
+            .overlay {
+                RoundedRectangle(cornerRadius: 8)
+                    .stroke(selectedVehicleID == "new" ? Color.tmGreen.opacity(0.45) : Color.tmLine, lineWidth: 1)
+            }
+        }
+    }
+}
+
+private struct VehicleSheetCard: View {
+    let vehicle: SavedVehicle
+    let isSelected: Bool
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "car.fill")
+                .font(.headline)
+                .foregroundStyle(isSelected ? .white : Color.tmGreen)
+                .frame(width: 38, height: 38)
+                .background(isSelected ? Color.tmGreen : Color.tmGreen.opacity(0.12))
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 6) {
+                    Text(vehicle.displayName)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(Color.tmInk)
+                    if vehicle.isDefault {
+                        Text("Default")
+                            .font(.caption2.weight(.bold))
+                            .foregroundStyle(Color.tmGreen)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 3)
+                            .background(Color.tmGreen.opacity(0.12))
+                            .clipShape(RoundedRectangle(cornerRadius: 6))
+                    }
+                }
+
+                Text("\(vehicle.powerType) · \(vehicle.bodyType)")
+                    .font(.caption)
+                    .foregroundStyle(Color.tmSlate)
+            }
+
+            Spacer()
+
+            Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                .font(.title3)
+                .foregroundStyle(isSelected ? Color.tmGreen : Color.tmLine)
+        }
+        .padding(14)
+        .background(.white)
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .overlay {
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(isSelected ? Color.tmGreen.opacity(0.5) : Color.tmLine, lineWidth: 1)
+        }
+    }
+}
+
+private struct VehicleInputRow: View {
+    let title: String
+    let placeholder: String
+    @Binding var text: String
+    var keyboardType: UIKeyboardType = .default
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text(title)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(Color.tmSlate)
+            TextField(placeholder, text: $text)
+                .font(.body.weight(.semibold))
+                .foregroundStyle(Color.tmInk)
+                .keyboardType(keyboardType)
+                .textInputAutocapitalization(.words)
+                .autocorrectionDisabled()
+        }
+        .padding(12)
+        .background(Color.tmMist)
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+}
+
+private struct PostRideRouteAutocompleteField: View {
+    let title: String
+    @Binding var text: String
+    let icon: String
+    @FocusState private var isFocused: Bool
+
+    private var suggestions: [NorthAmericaLocation] {
+        NorthAmericaLocation.suggestions(matching: text)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 10) {
+                Image(systemName: icon)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(Color.tmGreen)
+                    .frame(width: 22)
+
+                TextField(title, text: $text)
+                    .font(.body)
+                    .foregroundStyle(Color.tmInk)
+                    .textInputAutocapitalization(.words)
+                    .autocorrectionDisabled()
+                    .focused($isFocused)
+            }
+
+            if isFocused && !suggestions.isEmpty {
+                VStack(spacing: 0) {
+                    ForEach(suggestions) { location in
+                        Button {
+                            text = location.displayName
+                            isFocused = false
+                        } label: {
+                            HStack(spacing: 10) {
+                                Image(systemName: "mappin.circle.fill")
+                                    .foregroundStyle(Color.tmGreen)
+                                    .frame(width: 20)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(location.displayName)
+                                        .font(.subheadline.weight(.semibold))
+                                        .foregroundStyle(Color.tmInk)
+                                    Text("\(location.regionName), \(location.country)")
+                                        .font(.caption)
+                                        .foregroundStyle(Color.tmSlate)
+                                }
+                                Spacer()
+                            }
+                            .padding(.vertical, 8)
+                        }
+                        .buttonStyle(.plain)
+
+                        if location.id != suggestions.last?.id {
+                            Divider()
+                                .padding(.leading, 30)
+                        }
+                    }
+                }
+                .padding(.top, 2)
+            }
+        }
+    }
+}
+
+private struct MenuPickerPill: View {
+    let title: String
+    @Binding var selection: String
+    let options: [String]
+    let icon: String
+
+    var body: some View {
+        Menu {
+            ForEach(options, id: \.self) { option in
+                Button(option) {
+                    selection = option
+                }
+            }
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: icon)
+                    .foregroundStyle(Color.tmGreen)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title)
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(Color.tmSlate)
+                    Text(selection)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(Color.tmInk)
+                }
+                Spacer()
+                Image(systemName: "chevron.up.chevron.down")
+                    .font(.caption2.weight(.bold))
+                    .foregroundStyle(Color.tmSlate)
+            }
+            .padding(12)
+            .background(Color.tmMist)
+            .clipShape(RoundedRectangle(cornerRadius: 8))
+        }
+    }
+}
+
 private extension String {
     var trimmed: String {
         trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    var routeRegionCode: String {
+        split(separator: ",")
+            .last
+            .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) } ?? ""
     }
 }
 

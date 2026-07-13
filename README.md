@@ -117,6 +117,14 @@ Profile persistence can be verified separately with:
 
 This disposable-user test covers personal information, role changes, persisted statistics and verification fields, profile-photo upload/download, access rules, and cleanup.
 
+Security rules can be checked with:
+
+```bash
+./scripts/test-security-rules.sh
+```
+
+This disposable-user test confirms profile, vehicle, ride, profile-photo, ride-request, conversation, and message ownership rules reject common unauthorized writes.
+
 ### 2. Run the iOS app
 
 1. Open `TriipMate.xcodeproj`.
@@ -172,7 +180,7 @@ The project does not currently contain an automated test target. Adding unit and
 - `Docs/FirestoreDataModel.md` defines the Firestore collections, ownership rules, statuses, and marketplace model relationships.
 - `GoogleService-Info.plist` is ignored and must not be committed.
 
-Current emulator rules are development-oriented and must be tightened before staging or production use.
+Current emulator rules enforce ownership for writes and profile-photo storage paths. Some list reads remain authenticated-only until the app services move from local collection scans to server-side filtered Firestore queries.
 
 ## Git Workflow
 

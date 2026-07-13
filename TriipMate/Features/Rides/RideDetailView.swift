@@ -27,7 +27,7 @@ struct RideDetailView: View {
                 detailSection("Trip details") {
                     DetailRow(icon: "clock.fill", title: "Start time", value: ride.time)
                     DetailRow(icon: "clock.badge.checkmark.fill", title: "Expected end time", value: ride.endTime)
-                    DetailRow(icon: "point.topleft.down.curvedto.point.bottomright.up.fill", title: "Route", value: "\(ride.from) → \(ride.to)")
+                    RouteDetailBlock(from: ride.from, to: ride.to)
                     DetailRow(icon: "timer", title: "Trip time", value: ride.tripTime)
                     DetailRow(icon: "person.2.fill", title: "Current available seats", value: "\(ride.seats)")
                     DetailRow(icon: "carseat.left.fill", title: "Total seats", value: "\(ride.totalSeats)")
@@ -112,7 +112,7 @@ struct RideDetailView: View {
                 }
                 Spacer()
                 VStack(alignment: .trailing, spacing: 2) {
-                    Text("$\(ride.price)")
+                    Text(ride.priceSummary)
                         .font(.title2.bold())
                         .foregroundStyle(Color.tmInk)
                     Text("per seat")
@@ -168,7 +168,7 @@ struct RideRequestFormView: View {
                 Section("Ride") {
                     LabeledContent("Route", value: "\(ride.from) to \(ride.to)")
                     LabeledContent("Departure", value: "\(ride.date) at \(ride.time)")
-                    LabeledContent("Seat price", value: "$\(ride.price)")
+                    LabeledContent("Seat price", value: ride.priceSummary)
                 }
 
                 Section("Request") {
@@ -246,5 +246,40 @@ struct DetailRow: View {
                 .multilineTextAlignment(.trailing)
                 .layoutPriority(1)
         }
+    }
+}
+
+struct RouteDetailBlock: View {
+    let from: String
+    let to: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Label("Route", systemImage: "point.topleft.down.curvedto.point.bottomright.up.fill")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(Color.tmSlate)
+
+            HStack(spacing: 10) {
+                Text(from)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                Image(systemName: "arrow.right")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(Color.tmGreen)
+                    .frame(width: 24, height: 24)
+                    .background(Circle().fill(Color.white))
+                Text(to)
+                    .frame(maxWidth: .infinity, alignment: .trailing)
+            }
+            .font(.subheadline.weight(.bold))
+            .foregroundStyle(Color.tmInk)
+            .lineLimit(1)
+            .minimumScaleFactor(0.72)
+            .allowsTightening(true)
+        }
+        .padding(12)
+        .background(Color.tmGreen.opacity(0.08))
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Route \(from) to \(to)")
     }
 }

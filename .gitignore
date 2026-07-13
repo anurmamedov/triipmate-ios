@@ -51,6 +51,7 @@ fastlane/test_output
 .tools/
 firepit-log.txt
 firebase-data/
+firebase-dataok/
 firebase-debug.log
 firestore-debug.log
 ui-debug.log

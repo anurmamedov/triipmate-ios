@@ -2,8 +2,134 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+
+    function ride(rideId) {
+      return get(/databases/$(database)/documents/rides/$(rideId));
+    }
+
+    function conversation(conversationId) {
+      return get(/databases/$(database)/documents/conversations/$(conversationId));
+    }
+
+    function isRideDriver(rideId) {
+      return isSignedIn() && ride(rideId).data.driverUid == request.auth.uid;
+    }
+
+    function isRideOwnerPayload() {
+      return isSignedIn()
+        && request.resource.data.driverUid == request.auth.uid;
+    }
+
+    function isExistingRideOwner() {
+      return isSignedIn()
+        && resource.data.driverUid == request.auth.uid
+        && request.resource.data.driverUid == resource.data.driverUid;
+    }
+
+    function isRequestPassenger() {
+      return isSignedIn()
+        && request.resource.data.passengerUid == request.auth.uid;
+    }
+
+    function isExistingRequestPassenger() {
+      return isSignedIn()
+        && resource.data.passengerUid == request.auth.uid
+        && request.resource.data.passengerUid == resource.data.passengerUid;
+    }
+
+    function isTripParticipant() {
+      return isSignedIn()
+        && (request.resource.data.passengerUid == request.auth.uid
+          || request.resource.data.driverUid == request.auth.uid);
+    }
+
+    function isExistingTripParticipant() {
+      return isSignedIn()
+        && (resource.data.passengerUid == request.auth.uid
+          || resource.data.driverUid == request.auth.uid)
+        && request.resource.data.passengerUid == resource.data.passengerUid
+        && request.resource.data.driverUid == resource.data.driverUid;
+    }
+
+    function isConversationParticipant(data) {
+      return isSignedIn()
+        && request.auth.uid in data.participantUids
+        && (data.driverUid == request.auth.uid || data.passengerUid == request.auth.uid);
+    }
+
+    function isExistingConversationParticipant() {
+      return isConversationParticipant(resource.data);
+    }
+
+    function isParentConversationParticipant(conversationId) {
+      return isConversationParticipant(conversation(conversationId).data);
+    }
+
+    match /users/{userId} {
+      allow read, create, update, delete: if isOwner(userId);
+
+      match /vehicles/{vehicleId} {
+        allow read, create, update, delete: if isOwner(userId);
+      }
+    }
+
+    match /rides/{rideId} {
+      allow read: if isSignedIn();
+      allow create: if isRideOwnerPayload();
+      allow update: if isExistingRideOwner();
+      allow delete: if isSignedIn() && resource.data.driverUid == request.auth.uid;
+    }
+
+    match /rideRequests/{requestId} {
+      allow read: if isSignedIn();
+      allow create: if isRequestPassenger();
+      allow update: if isExistingRequestPassenger()
+        || (isRideDriver(resource.data.rideId)
+          && request.resource.data.rideId == resource.data.rideId
+          && request.resource.data.passengerUid == resource.data.passengerUid);
+      allow delete: if isSignedIn()
+        && (resource.data.passengerUid == request.auth.uid || isRideDriver(resource.data.rideId));
+    }
+
+    match /trips/{tripId} {
+      allow read: if isSignedIn();
+      allow create: if isTripParticipant();
+      allow update: if isExistingTripParticipant();
+      allow delete: if isSignedIn()
+        && (resource.data.passengerUid == request.auth.uid || resource.data.driverUid == request.auth.uid);
+    }
+
+    match /conversations/{conversationId} {
+      allow read: if isSignedIn();
+      allow create: if isConversationParticipant(request.resource.data);
+      allow update: if isExistingConversationParticipant()
+        && isConversationParticipant(request.resource.data)
+        && request.resource.data.participantUids == resource.data.participantUids
+        && request.resource.data.driverUid == resource.data.driverUid
+        && request.resource.data.passengerUid == resource.data.passengerUid;
+      allow delete: if isExistingConversationParticipant();
+
+      match /messages/{messageId} {
+        allow read: if isParentConversationParticipant(conversationId);
+        allow create: if isParentConversationParticipant(conversationId)
+          && request.resource.data.senderUid == request.auth.uid
+          && request.resource.data.conversationId == conversationId;
+        allow update: if isParentConversationParticipant(conversationId)
+          && resource.data.senderUid == request.resource.data.senderUid
+          && request.resource.data.conversationId == conversationId;
+        allow delete: if isParentConversationParticipant(conversationId);
+      }
+    }
+
     match /{document=**} {
-      allow read, write: if request.auth != null;
+      allow read, write: if false;
     }
   }
 }

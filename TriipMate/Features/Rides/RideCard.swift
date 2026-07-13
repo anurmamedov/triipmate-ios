@@ -16,7 +16,7 @@ struct RideCard: View {
                 Spacer()
 
                 VStack(alignment: .trailing, spacing: 2) {
-                    Text("$\(ride.price)")
+                    Text(ride.priceSummary)
                         .font(.title2.bold())
                         .foregroundStyle(Color.tmInk)
                     Text("per seat")

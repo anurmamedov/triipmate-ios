@@ -132,13 +132,30 @@ struct LocalFirestoreVehicleService {
         request.setValue("Bearer \(idToken)", forHTTPHeaderField: "Authorization")
         request.httpBody = try JSONEncoder().encode(
             FirestoreVehicleDocument(fields: [
-                "make": FirestoreStringValue(stringValue: vehicle.make),
-                "model": FirestoreStringValue(stringValue: vehicle.model),
-                "year": FirestoreStringValue(stringValue: vehicle.year),
-                "powerType": FirestoreStringValue(stringValue: vehicle.powerType),
-                "bodyType": FirestoreStringValue(stringValue: vehicle.bodyType)
+                "make": FirestoreVehicleValue(stringValue: vehicle.make),
+                "model": FirestoreVehicleValue(stringValue: vehicle.model),
+                "year": FirestoreVehicleValue(stringValue: vehicle.year),
+                "powerType": FirestoreVehicleValue(stringValue: vehicle.powerType),
+                "bodyType": FirestoreVehicleValue(stringValue: vehicle.bodyType),
+                "isDefault": FirestoreVehicleValue(booleanValue: vehicle.isDefault)
             ])
         )
+
+        let (_, response) = try await URLSession.shared.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse,
+              (200..<300).contains(httpResponse.statusCode) else {
+            throw LocalAuthError.invalidResponse
+        }
+    }
+
+    func delete(vehicleID: String, uid: String, idToken: String) async throws {
+        let url = usersURL
+            .appendingPathComponent(uid)
+            .appendingPathComponent("vehicles")
+            .appendingPathComponent(vehicleID)
+        var request = URLRequest(url: url)
+        request.httpMethod = "DELETE"
+        request.setValue("Bearer \(idToken)", forHTTPHeaderField: "Authorization")
 
         let (_, response) = try await URLSession.shared.data(for: request)
         guard let httpResponse = response as? HTTPURLResponse,
@@ -173,10 +190,18 @@ struct LocalFirestoreVehicleService {
                 model: model,
                 year: year,
                 powerType: fields["powerType"]?.stringValue ?? "Fuel",
-                bodyType: fields["bodyType"]?.stringValue ?? "Sedan"
+                bodyType: fields["bodyType"]?.stringValue ?? "Sedan",
+                isDefault: fields["isDefault"]?.booleanValue ?? false
             )
         }
-        .sorted { $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending }
+        .sorted(by: Self.vehicleSort)
+    }
+
+    private static func vehicleSort(_ lhs: SavedVehicle, _ rhs: SavedVehicle) -> Bool {
+        if lhs.isDefault != rhs.isDefault {
+            return lhs.isDefault
+        }
+        return lhs.displayName.localizedCaseInsensitiveCompare(rhs.displayName) == .orderedAscending
     }
 }
 
@@ -343,11 +368,201 @@ struct LocalFirestoreRideRequestService {
     }
 }
 
+struct LocalFirestorePassengerTripService {
+    private let projectId = "demo-triipmate-local"
+
+    private var tripsURL: URL {
+        URL(string: "http://127.0.0.1:8080/v1/projects/\(projectId)/databases/(default)/documents/trips")!
+    }
+
+    func save(_ trip: PassengerTrip, idToken: String) async throws {
+        var request = URLRequest(url: tripsURL.appendingPathComponent(trip.id))
+        request.httpMethod = "PATCH"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("Bearer \(idToken)", forHTTPHeaderField: "Authorization")
+        request.httpBody = try JSONEncoder().encode(FirestorePassengerTripDocument(trip: trip))
+
+        let (_, response) = try await URLSession.shared.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse,
+              (200..<300).contains(httpResponse.statusCode) else {
+            throw LocalAuthError.invalidResponse
+        }
+    }
+
+    func fetchPassengerTrips(uid: String, idToken: String) async throws -> [PassengerTrip] {
+        let trips = try await fetchAllTrips(idToken: idToken)
+        return trips
+            .filter { $0.passengerUid == uid }
+            .sorted { $0.createdAt.date > $1.createdAt.date }
+    }
+
+    func fetchRideTrips(rideId: String, idToken: String) async throws -> [PassengerTrip] {
+        let trips = try await fetchAllTrips(idToken: idToken)
+        return trips
+            .filter { $0.rideId == rideId }
+            .sorted { $0.createdAt.date > $1.createdAt.date }
+    }
+
+    private func fetchAllTrips(idToken: String) async throws -> [PassengerTrip] {
+        var request = URLRequest(url: tripsURL)
+        request.setValue("Bearer \(idToken)", forHTTPHeaderField: "Authorization")
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw LocalAuthError.invalidResponse
+        }
+
+        if httpResponse.statusCode == 404 {
+            return []
+        }
+
+        guard (200..<300).contains(httpResponse.statusCode) else {
+            throw LocalAuthError.invalidResponse
+        }
+
+        let collection = try JSONDecoder().decode(FirestorePassengerTripCollection.self, from: data)
+        return (collection.documents ?? [])
+            .compactMap { $0.passengerTrip }
+    }
+}
+
+struct LocalFirestoreMessagingService {
+    private let projectId = "demo-triipmate-local"
+
+    private var conversationsURL: URL {
+        URL(string: "http://127.0.0.1:8080/v1/projects/\(projectId)/databases/(default)/documents/conversations")!
+    }
+
+    func saveConversation(_ conversation: RideConversation, idToken: String) async throws {
+        var request = URLRequest(url: conversationsURL.appendingPathComponent(conversation.id))
+        request.httpMethod = "PATCH"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("Bearer \(idToken)", forHTTPHeaderField: "Authorization")
+        request.httpBody = try JSONEncoder().encode(FirestoreConversationDocument(conversation: conversation))
+
+        let (_, response) = try await URLSession.shared.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse,
+              (200..<300).contains(httpResponse.statusCode) else {
+            throw LocalAuthError.invalidResponse
+        }
+    }
+
+    func fetchConversations(uid: String, idToken: String) async throws -> [RideConversation] {
+        var request = URLRequest(url: conversationsURL)
+        request.setValue("Bearer \(idToken)", forHTTPHeaderField: "Authorization")
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw LocalAuthError.invalidResponse
+        }
+
+        if httpResponse.statusCode == 404 {
+            return []
+        }
+
+        guard (200..<300).contains(httpResponse.statusCode) else {
+            throw LocalAuthError.invalidResponse
+        }
+
+        let collection = try JSONDecoder().decode(FirestoreConversationCollection.self, from: data)
+        return (collection.documents ?? [])
+            .compactMap(\.conversation)
+            .filter { $0.participantUids.contains(uid) }
+            .sorted {
+                ($0.lastMessageAt?.date ?? $0.updatedAt.date) > ($1.lastMessageAt?.date ?? $1.updatedAt.date)
+            }
+    }
+
+    func sendMessage(body: String, conversation: RideConversation, senderUid: String, idToken: String) async throws -> RideMessage {
+        let cleanBody = body.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanBody.isEmpty else {
+            throw LocalAuthError.invalidInput("Enter a message before sending.")
+        }
+
+        let now = FirestoreTimestamp(date: Date())
+        let message = RideMessage(
+            id: UUID().uuidString,
+            conversationId: conversation.id,
+            senderUid: senderUid,
+            body: cleanBody,
+            status: .sent,
+            readByUids: [senderUid],
+            createdAt: now
+        )
+
+        var request = URLRequest(url: messagesURL(conversationId: conversation.id).appendingPathComponent(message.id))
+        request.httpMethod = "PATCH"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("Bearer \(idToken)", forHTTPHeaderField: "Authorization")
+        request.httpBody = try JSONEncoder().encode(FirestoreMessageDocument(message: message))
+
+        let (_, response) = try await URLSession.shared.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse,
+              (200..<300).contains(httpResponse.statusCode) else {
+            throw LocalAuthError.invalidResponse
+        }
+
+        var unreadCounts = conversation.unreadCountsByUid
+        for uid in conversation.participantUids {
+            unreadCounts[uid] = uid == senderUid ? 0 : (unreadCounts[uid] ?? 0) + 1
+        }
+
+        let updatedConversation = conversation.updated(
+            lastMessagePreview: cleanBody,
+            lastMessageAt: now,
+            unreadCountsByUid: unreadCounts
+        )
+        try await saveConversation(updatedConversation, idToken: idToken)
+        return message
+    }
+
+    func fetchMessages(conversationId: String, idToken: String) async throws -> [RideMessage] {
+        var request = URLRequest(url: messagesURL(conversationId: conversationId))
+        request.setValue("Bearer \(idToken)", forHTTPHeaderField: "Authorization")
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw LocalAuthError.invalidResponse
+        }
+
+        if httpResponse.statusCode == 404 {
+            return []
+        }
+
+        guard (200..<300).contains(httpResponse.statusCode) else {
+            throw LocalAuthError.invalidResponse
+        }
+
+        let collection = try JSONDecoder().decode(FirestoreMessageCollection.self, from: data)
+        return (collection.documents ?? [])
+            .compactMap(\.message)
+            .sorted { $0.createdAt.date < $1.createdAt.date }
+    }
+
+    func markRead(conversation: RideConversation, uid: String, idToken: String) async throws -> RideConversation {
+        guard conversation.unreadCountsByUid[uid, default: 0] > 0 else {
+            return conversation
+        }
+
+        var unreadCounts = conversation.unreadCountsByUid
+        unreadCounts[uid] = 0
+        let updatedConversation = conversation.updated(unreadCountsByUid: unreadCounts)
+        try await saveConversation(updatedConversation, idToken: idToken)
+        return updatedConversation
+    }
+
+    private func messagesURL(conversationId: String) -> URL {
+        conversationsURL
+            .appendingPathComponent(conversationId)
+            .appendingPathComponent("messages")
+    }
+}
+
 private struct FirestoreVehicleDocument: Codable {
     let name: String?
-    let fields: [String: FirestoreStringValue]
+    let fields: [String: FirestoreVehicleValue]
 
-    init(name: String? = nil, fields: [String: FirestoreStringValue]) {
+    init(name: String? = nil, fields: [String: FirestoreVehicleValue]) {
         self.name = name
         self.fields = fields
     }
@@ -366,6 +581,7 @@ private struct FirestoreUserFields: Codable {
     let lastName: FirestoreStringValue
     let email: FirestoreStringValue
     let phone: FirestoreStringValue
+    let countryCode: FirestoreStringValue?
     let role: FirestoreStringValue
     let profilePhotoPath: FirestoreStringValue?
     let ratingAverage: FirestoreDoubleValue?
@@ -381,6 +597,7 @@ private struct FirestoreUserFields: Codable {
         lastName = FirestoreStringValue(stringValue: profile.lastName)
         email = FirestoreStringValue(stringValue: profile.email)
         phone = FirestoreStringValue(stringValue: profile.phone)
+        countryCode = FirestoreStringValue(stringValue: profile.countryCode)
         role = FirestoreStringValue(stringValue: profile.role.rawValue)
         profilePhotoPath = profile.profilePhotoPath.map(FirestoreStringValue.init(stringValue:))
         ratingAverage = profile.ratingAverage.map(FirestoreDoubleValue.init(doubleValue:))
@@ -399,6 +616,7 @@ private struct FirestoreUserFields: Codable {
             lastName: lastName.stringValue,
             email: email.stringValue,
             phone: phone.stringValue,
+            countryCode: countryCode?.stringValue ?? UserProfile.countryCode(fromPhone: phone.stringValue),
             role: AppRole(rawValue: role.stringValue) ?? .passenger,
             profilePhotoPath: profilePhotoPath?.stringValue,
             ratingAverage: ratingAverage?.doubleValue,
@@ -413,6 +631,21 @@ private struct FirestoreUserFields: Codable {
 
 private struct FirestoreStringValue: Codable {
     let stringValue: String
+}
+
+private struct FirestoreVehicleValue: Codable {
+    let stringValue: String?
+    let booleanValue: Bool?
+
+    init(stringValue: String) {
+        self.stringValue = stringValue
+        booleanValue = nil
+    }
+
+    init(booleanValue: Bool) {
+        stringValue = nil
+        self.booleanValue = booleanValue
+    }
 }
 
 private struct FirestoreDoubleValue: Codable {
@@ -491,11 +724,83 @@ private struct FirestoreRideRequestDocument: Encodable {
     }
 }
 
+private struct FirestorePassengerTripDocument: Encodable {
+    let fields: [String: FirestoreRideValue]
+
+    init(trip: PassengerTrip) {
+        fields = [
+            "requestId": .string(trip.requestId),
+            "rideId": .string(trip.rideId),
+            "passengerUid": .string(trip.passengerUid),
+            "driverUid": .string(trip.driverUid),
+            "seats": .integer(trip.seats),
+            "status": .string(trip.status.rawValue),
+            "rideSnapshot": .map(trip.rideSnapshot.firestoreFields),
+            "createdAt": .timestamp(trip.createdAt.date),
+            "updatedAt": .timestamp(trip.updatedAt.date)
+        ]
+    }
+}
+
+private struct FirestoreConversationDocument: Encodable {
+    let fields: [String: FirestoreRideValue]
+
+    init(conversation: RideConversation) {
+        var conversationFields: [String: FirestoreRideValue] = [
+            "participantUids": .array(conversation.participantUids.map(FirestoreRideValue.string)),
+            "driverUid": .string(conversation.driverUid),
+            "passengerUid": .string(conversation.passengerUid),
+            "driverDisplayName": .string(conversation.driverDisplayName),
+            "passengerDisplayName": .string(conversation.passengerDisplayName),
+            "routeTitle": .string(conversation.routeTitle),
+            "unreadCountsByUid": .integerMap(conversation.unreadCountsByUid),
+            "status": .string(conversation.status.rawValue),
+            "createdAt": .timestamp(conversation.createdAt.date),
+            "updatedAt": .timestamp(conversation.updatedAt.date)
+        ]
+
+        if let rideId = conversation.rideId {
+            conversationFields["rideId"] = .string(rideId)
+        }
+
+        if let requestId = conversation.requestId {
+            conversationFields["requestId"] = .string(requestId)
+        }
+
+        if let lastMessagePreview = conversation.lastMessagePreview {
+            conversationFields["lastMessagePreview"] = .string(lastMessagePreview)
+        }
+
+        if let lastMessageAt = conversation.lastMessageAt {
+            conversationFields["lastMessageAt"] = .timestamp(lastMessageAt.date)
+        }
+
+        fields = conversationFields
+    }
+}
+
+private struct FirestoreMessageDocument: Encodable {
+    let fields: [String: FirestoreRideValue]
+
+    init(message: RideMessage) {
+        fields = [
+            "conversationId": .string(message.conversationId),
+            "senderUid": .string(message.senderUid),
+            "body": .string(message.body),
+            "status": .string(message.status.rawValue),
+            "readByUids": .array(message.readByUids.map(FirestoreRideValue.string)),
+            "createdAt": .timestamp(message.createdAt.date)
+        ]
+    }
+}
+
 private enum FirestoreRideValue: Encodable {
     case string(String)
     case integer(Int)
     case timestamp(Date)
     case map([String: FirestoreRideValue])
+    case array([FirestoreRideValue])
+    case integerMap([String: Int])
 
     func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
@@ -509,6 +814,13 @@ private enum FirestoreRideValue: Encodable {
             try container.encode(Self.timestampFormatter.string(from: date), forKey: .timestampValue)
         case .map(let fields):
             try container.encode(FirestoreMapValue(fields: fields), forKey: .mapValue)
+        case .array(let values):
+            try container.encode(FirestoreArrayValue(values: values), forKey: .arrayValue)
+        case .integerMap(let values):
+            try container.encode(
+                FirestoreMapValue(fields: values.mapValues(FirestoreRideValue.integer)),
+                forKey: .mapValue
+            )
         }
     }
 
@@ -517,6 +829,7 @@ private enum FirestoreRideValue: Encodable {
         case integerValue
         case timestampValue
         case mapValue
+        case arrayValue
     }
 
     private static let timestampFormatter: ISO8601DateFormatter = {
@@ -530,12 +843,28 @@ private struct FirestoreMapValue: Encodable {
     let fields: [String: FirestoreRideValue]
 }
 
+private struct FirestoreArrayValue: Encodable {
+    let values: [FirestoreRideValue]
+}
+
 private struct FirestoreRideCollection: Decodable {
     let documents: [FirestoreDecodedRideDocument]?
 }
 
 private struct FirestoreRideRequestCollection: Decodable {
     let documents: [FirestoreDecodedRideRequestDocument]?
+}
+
+private struct FirestorePassengerTripCollection: Decodable {
+    let documents: [FirestoreDecodedPassengerTripDocument]?
+}
+
+private struct FirestoreConversationCollection: Decodable {
+    let documents: [FirestoreDecodedConversationDocument]?
+}
+
+private struct FirestoreMessageCollection: Decodable {
+    let documents: [FirestoreDecodedMessageDocument]?
 }
 
 private struct FirestoreDecodedRideDocument: Decodable {
@@ -626,14 +955,127 @@ private struct FirestoreDecodedRideRequestDocument: Decodable {
     }
 }
 
+private struct FirestoreDecodedPassengerTripDocument: Decodable {
+    let name: String?
+    let fields: [String: FirestoreDecodedValue]
+
+    var passengerTrip: PassengerTrip? {
+        let id = name?.split(separator: "/").last.map(String.init) ?? UUID().uuidString
+        guard let requestId = fields["requestId"]?.stringValue,
+              let rideId = fields["rideId"]?.stringValue,
+              let passengerUid = fields["passengerUid"]?.stringValue,
+              let driverUid = fields["driverUid"]?.stringValue,
+              let seats = fields["seats"]?.intValue,
+              let statusRawValue = fields["status"]?.stringValue,
+              let status = TripStatus(rawValue: statusRawValue),
+              let rideSnapshot = fields["rideSnapshot"]?.rideSnapshot,
+              let createdAt = fields["createdAt"]?.timestamp,
+              let updatedAt = fields["updatedAt"]?.timestamp else {
+            return nil
+        }
+
+        return PassengerTrip(
+            id: id,
+            requestId: requestId,
+            rideId: rideId,
+            passengerUid: passengerUid,
+            driverUid: driverUid,
+            seats: seats,
+            status: status,
+            rideSnapshot: rideSnapshot,
+            createdAt: createdAt,
+            updatedAt: updatedAt
+        )
+    }
+}
+
+private struct FirestoreDecodedConversationDocument: Decodable {
+    let name: String?
+    let fields: [String: FirestoreDecodedValue]
+
+    var conversation: RideConversation? {
+        let id = name?.split(separator: "/").last.map(String.init) ?? UUID().uuidString
+        guard let participantUids = fields["participantUids"]?.stringArray,
+              let driverUid = fields["driverUid"]?.stringValue,
+              let passengerUid = fields["passengerUid"]?.stringValue,
+              let driverDisplayName = fields["driverDisplayName"]?.stringValue,
+              let passengerDisplayName = fields["passengerDisplayName"]?.stringValue,
+              let routeTitle = fields["routeTitle"]?.stringValue,
+              let statusRawValue = fields["status"]?.stringValue,
+              let status = ConversationStatus(rawValue: statusRawValue),
+              let createdAt = fields["createdAt"]?.timestamp,
+              let updatedAt = fields["updatedAt"]?.timestamp else {
+            return nil
+        }
+
+        return RideConversation(
+            id: id,
+            rideId: fields["rideId"]?.stringValue,
+            requestId: fields["requestId"]?.stringValue,
+            participantUids: participantUids,
+            driverUid: driverUid,
+            passengerUid: passengerUid,
+            driverDisplayName: driverDisplayName,
+            passengerDisplayName: passengerDisplayName,
+            routeTitle: routeTitle,
+            lastMessagePreview: fields["lastMessagePreview"]?.stringValue,
+            lastMessageAt: fields["lastMessageAt"]?.timestamp,
+            unreadCountsByUid: fields["unreadCountsByUid"]?.integerMap ?? [:],
+            status: status,
+            createdAt: createdAt,
+            updatedAt: updatedAt
+        )
+    }
+}
+
+private struct FirestoreDecodedMessageDocument: Decodable {
+    let name: String?
+    let fields: [String: FirestoreDecodedValue]
+
+    var message: RideMessage? {
+        let id = name?.split(separator: "/").last.map(String.init) ?? UUID().uuidString
+        guard let conversationId = fields["conversationId"]?.stringValue,
+              let senderUid = fields["senderUid"]?.stringValue,
+              let body = fields["body"]?.stringValue,
+              let statusRawValue = fields["status"]?.stringValue,
+              let status = MessageStatus(rawValue: statusRawValue),
+              let readByUids = fields["readByUids"]?.stringArray,
+              let createdAt = fields["createdAt"]?.timestamp else {
+            return nil
+        }
+
+        return RideMessage(
+            id: id,
+            conversationId: conversationId,
+            senderUid: senderUid,
+            body: body,
+            status: status,
+            readByUids: readByUids,
+            createdAt: createdAt
+        )
+    }
+}
+
 private struct FirestoreDecodedValue: Decodable {
     let stringValue: String?
     let integerValue: String?
     let timestampValue: String?
     let mapValue: FirestoreDecodedMapValue?
+    let arrayValue: FirestoreDecodedArrayValue?
 
     var intValue: Int? {
         integerValue.flatMap(Int.init)
+    }
+
+    var stringArray: [String]? {
+        arrayValue?.values?.compactMap(\.stringValue)
+    }
+
+    var integerMap: [String: Int]? {
+        guard let fields = mapValue?.fields else { return nil }
+        return fields.reduce(into: [String: Int]()) { result, element in
+            result[element.key] = element.value.intValue ?? 0
+        }
     }
 
     var timestamp: FirestoreTimestamp? {
@@ -679,6 +1121,32 @@ private struct FirestoreDecodedValue: Decodable {
         )
     }
 
+    var rideSnapshot: RideSnapshot? {
+        guard let fields = mapValue?.fields,
+              let rideId = fields["rideId"]?.stringValue,
+              let driverUid = fields["driverUid"]?.stringValue,
+              let driverDisplayName = fields["driverDisplayName"]?.stringValue,
+              let from = fields["from"]?.routeEndpoint,
+              let to = fields["to"]?.routeEndpoint,
+              let departureAt = fields["departureAt"]?.timestamp,
+              let pricePerSeatCents = fields["pricePerSeatCents"]?.intValue,
+              let vehicle = fields["vehicle"]?.vehicleSnapshot else {
+            return nil
+        }
+
+        return RideSnapshot(
+            rideId: rideId,
+            driverUid: driverUid,
+            driverDisplayName: driverDisplayName,
+            from: from,
+            to: to,
+            departureAt: departureAt,
+            expectedArrivalAt: fields["expectedArrivalAt"]?.timestamp,
+            pricePerSeatCents: pricePerSeatCents,
+            vehicle: vehicle
+        )
+    }
+
     private static func date(from timestamp: String) -> Date? {
         fractionalTimestampFormatter.date(from: timestamp) ?? wholeSecondTimestampFormatter.date(from: timestamp)
     }
@@ -698,6 +1166,10 @@ private struct FirestoreDecodedValue: Decodable {
 
 private struct FirestoreDecodedMapValue: Decodable {
     let fields: [String: FirestoreDecodedValue]?
+}
+
+private struct FirestoreDecodedArrayValue: Decodable {
+    let values: [FirestoreDecodedValue]?
 }
 
 private extension RouteEndpoint {
@@ -723,6 +1195,27 @@ private extension VehicleSnapshot {
 
         if let vehicleId {
             fields["vehicleId"] = .string(vehicleId)
+        }
+
+        return fields
+    }
+}
+
+private extension RideSnapshot {
+    var firestoreFields: [String: FirestoreRideValue] {
+        var fields: [String: FirestoreRideValue] = [
+            "rideId": .string(rideId),
+            "driverUid": .string(driverUid),
+            "driverDisplayName": .string(driverDisplayName),
+            "from": .map(from.firestoreFields),
+            "to": .map(to.firestoreFields),
+            "departureAt": .timestamp(departureAt.date),
+            "pricePerSeatCents": .integer(pricePerSeatCents),
+            "vehicle": .map(vehicle.firestoreFields)
+        ]
+
+        if let expectedArrivalAt {
+            fields["expectedArrivalAt"] = .timestamp(expectedArrivalAt.date)
         }
 
         return fields

@@ -368,17 +368,39 @@ struct DriverDashboardView: View {
 
 struct PassengerTripsView: View {
     @EnvironmentObject private var session: AppSession
+    @State private var requestToCancel: JoinRideRequest?
+
+    private var tripItems: [PassengerTripItem] {
+        let tripRequestIds = Set(session.passengerTrips.map(\.requestId))
+        let tripItems = session.passengerTrips.map(PassengerTripItem.trip)
+        let requestItems = session.passengerRideRequests
+            .filter { !tripRequestIds.contains($0.id) }
+            .map(PassengerTripItem.request)
+        return (tripItems + requestItems).sorted { $0.sortDate > $1.sortDate }
+    }
 
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
-                    Text("Track requested, accepted, and completed rides in one place.")
-                        .font(.subheadline)
-                        .foregroundStyle(Color.tmSlate)
+                    passengerTripsHeader
 
-                    TripStatusCard(status: "Pending request", title: "New York to Chicago", detail: "Waiting for Maya Chen to accept your seat request.", icon: "hourglass")
-                    TripStatusCard(status: "Accepted", title: "Philadelphia to Pittsburgh", detail: "Pickup details are confirmed in Messages.", icon: "checkmark.seal.fill")
+                    if session.isPassengerTripsLoading && tripItems.isEmpty {
+                        loadingTrips
+                    } else if let authError = session.authError, tripItems.isEmpty {
+                        retryTrips(message: authError)
+                    } else if tripItems.isEmpty {
+                        emptyTrips
+                    } else {
+                        ForEach(tripItems) { item in
+                            NavigationLink(value: item) {
+                                PassengerTripCard(item: item) {
+                                    requestToCancel = item.pendingRequest
+                                }
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
                 }
                 .padding(20)
             }
@@ -386,7 +408,87 @@ struct PassengerTripsView: View {
             .safeAreaInset(edge: .top, spacing: 0) {
                 RoleSwitchHeader()
             }
+            .task {
+                await session.loadPassengerTrips()
+            }
+            .refreshable {
+                await session.loadPassengerTrips()
+            }
+            .navigationDestination(for: PassengerTripItem.self) { item in
+                PassengerTripDetailView(item: item) {
+                    requestToCancel = item.pendingRequest
+                }
+            }
+            .alert(item: $requestToCancel) { request in
+                Alert(
+                    title: Text("Cancel request?"),
+                    message: Text("The driver will no longer see this pending seat request."),
+                    primaryButton: .destructive(Text("Cancel request")) {
+                        Task { await session.cancelPassengerRideRequest(request) }
+                    },
+                    secondaryButton: .cancel()
+                )
+            }
         }
+    }
+
+    private var passengerTripsHeader: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("My Trips")
+                .font(.title2.bold())
+                .foregroundStyle(Color.tmInk)
+            Text("Track pending requests, accepted trips, cancellations, and completed ride history.")
+                .font(.subheadline)
+                .foregroundStyle(Color.tmSlate)
+        }
+    }
+
+    private var loadingTrips: some View {
+        VStack(spacing: 12) {
+            ProgressView()
+                .tint(Color.tmGreen)
+            Text("Loading your trips...")
+                .font(.subheadline)
+                .foregroundStyle(Color.tmSlate)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 42)
+    }
+
+    private func retryTrips(message: String) -> some View {
+        VStack(spacing: 12) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .font(.title2)
+                .foregroundStyle(Color.tmAmber)
+            Text(message)
+                .font(.subheadline)
+                .multilineTextAlignment(.center)
+                .foregroundStyle(Color.tmSlate)
+            Button("Try again") {
+                Task { await session.loadPassengerTrips() }
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(Color.tmGreen)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 42)
+    }
+
+    private var emptyTrips: some View {
+        VStack(spacing: 12) {
+            Image(systemName: "ticket")
+                .font(.title)
+                .foregroundStyle(Color.tmGreen)
+            Text("No passenger trips yet")
+                .font(.headline)
+                .foregroundStyle(Color.tmInk)
+            Text("Requests you send from Search will appear here with their current status.")
+                .font(.subheadline)
+                .multilineTextAlignment(.center)
+                .foregroundStyle(Color.tmSlate)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 42)
     }
 }
 
@@ -691,38 +793,79 @@ private struct DriverRideDetailView: View {
                 .requestDetailSection()
             }
             .padding(20)
+            .padding(.bottom, 92)
         }
         .background(Color.tmMist.ignoresSafeArea())
         .navigationTitle("Ride details")
         .navigationBarTitleDisplayMode(.inline)
-        .safeAreaInset(edge: .bottom) {
-            HStack(spacing: 10) {
-                Button(action: onDelete) {
-                    Image(systemName: "trash.fill")
-                        .frame(width: 44, height: 44)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Menu {
+                    Button(role: .destructive, action: onDelete) {
+                        Label("Delete ride", systemImage: "trash.fill")
+                    }
+                } label: {
+                    Image(systemName: "ellipsis.circle.fill")
+                        .font(.title3)
+                        .foregroundStyle(Color.tmSlate)
                 }
-                .buttonStyle(.bordered)
-                .tint(Color.red)
-
-                Button(action: onCancel) {
-                    Label("Cancel", systemImage: "xmark.circle.fill")
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.bordered)
-                .tint(Color.tmSlate)
-                .disabled(ride.status == .cancelled || ride.status == .completed)
-
-                Button(action: onEdit) {
-                    Label("Edit", systemImage: "square.and.pencil")
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.borderedProminent)
-                .tint(Color.tmGreen)
-                .disabled(ride.status == .completed || ride.status == .cancelled)
+                .accessibilityLabel("Ride actions")
             }
-            .padding(.horizontal, 20)
-            .padding(.vertical, 12)
-            .background(.ultraThinMaterial)
+        }
+        .safeAreaInset(edge: .bottom) {
+            DriverRideDecisionBar(
+                canChangeRide: ride.status != .completed && ride.status != .cancelled,
+                onEdit: onEdit,
+                onCancel: onCancel
+            )
+        }
+    }
+}
+
+private struct DriverRideDecisionBar: View {
+    let canChangeRide: Bool
+    let onEdit: () -> Void
+    let onCancel: () -> Void
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Button(action: onCancel) {
+                Label("Cancel ride", systemImage: "xmark.circle.fill")
+                    .font(.subheadline.weight(.bold))
+                    .foregroundStyle(canChangeRide ? Color.tmInk : Color.tmSlate.opacity(0.6))
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 52)
+                    .background(canChangeRide ? Color.tmCloud : Color.tmLine.opacity(0.7))
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+            }
+            .buttonStyle(.plain)
+            .disabled(!canChangeRide)
+
+            Button(action: onEdit) {
+                Label("Edit", systemImage: "square.and.pencil")
+                    .font(.subheadline.weight(.bold))
+                    .foregroundStyle(.white)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 52)
+                    .background(canChangeRide ? Color.tmGreen : Color.tmSlate.opacity(0.45))
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                    .shadow(color: Color.tmGreen.opacity(canChangeRide ? 0.22 : 0), radius: 10, y: 5)
+            }
+            .buttonStyle(.plain)
+            .disabled(!canChangeRide)
+        }
+        .padding(.horizontal, 20)
+        .padding(.top, 12)
+        .padding(.bottom, 10)
+        .background {
+            Rectangle()
+                .fill(Color.tmMist.opacity(0.96))
+                .ignoresSafeArea()
+                .overlay(alignment: .top) {
+                    Rectangle()
+                        .fill(Color.tmLine.opacity(0.8))
+                        .frame(height: 1)
+                }
         }
     }
 }
@@ -764,7 +907,7 @@ private struct DriverRideEditView: View {
                             availableSeats = min(availableSeats, value)
                         }
                     Stepper("Available seats: \(availableSeats)", value: $availableSeats, in: 0...totalSeats)
-                    Stepper("$\(Int(price)) per seat", value: $price, in: 25...1500, step: 1)
+                    Stepper("\(CurrencySupport.format(cents: Int(price.rounded()) * 100, regionCode: ride.from.state)) per seat", value: $price, in: 25...1500, step: 1)
                 }
 
                 Section("Status") {
@@ -867,7 +1010,7 @@ private extension MarketplaceRide {
     }
 
     var priceSummary: String {
-        "$\(pricePerSeatCents / 100)"
+        CurrencySupport.format(cents: pricePerSeatCents, regionCode: from.state)
     }
 
     private static let shortDateFormatter: DateFormatter = {
@@ -939,12 +1082,142 @@ private extension RideRequestStatus {
     }
 }
 
+private extension TripStatus {
+    var displayTitle: String {
+        switch self {
+        case .pending:
+            return "Pending"
+        case .accepted:
+            return "Accepted"
+        case .active:
+            return "Active"
+        case .completed:
+            return "Completed"
+        case .declined:
+            return "Declined"
+        case .cancelled:
+            return "Cancelled"
+        }
+    }
+
+    var tint: Color {
+        switch self {
+        case .pending:
+            return Color.tmAmber
+        case .accepted, .active:
+            return Color.tmGreen
+        case .completed:
+            return Color.tmInk
+        case .declined, .cancelled:
+            return Color.tmSlate
+        }
+    }
+}
+
+private extension RideSnapshot {
+    var routeSummary: String {
+        "\(from.displayName) -> \(to.displayName)"
+    }
+
+    var departureSummary: String {
+        Self.tripDateFormatter.string(from: departureAt.date)
+    }
+
+    var arrivalSummary: String {
+        guard let expectedArrivalAt else {
+            return "Not set"
+        }
+        return Self.tripDateFormatter.string(from: expectedArrivalAt.date)
+    }
+
+    var priceSummary: String {
+        "\(CurrencySupport.format(cents: pricePerSeatCents, regionCode: from.state)) per seat"
+    }
+
+    private static let tripDateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "MMM d, h:mm a"
+        return formatter
+    }()
+}
+
 private extension JoinRideRequest {
     var createdSummary: String {
         Self.requestDateFormatter.string(from: createdAt.date)
     }
 
+    var totalPriceSummary: String {
+        CurrencySupport.format(cents: pricePerSeatCents * seatsRequested, countryCode: nil)
+    }
+
     private static let requestDateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "MMM d, h:mm a"
+        return formatter
+    }()
+}
+
+struct PassengerTripItem: Identifiable, Hashable {
+    let id: String
+    let statusTitle: String
+    let statusTint: Color
+    let title: String
+    let detail: String
+    let seats: Int
+    let pricePerSeatCents: Int
+    let sortDate: Date
+    let createdSummary: String
+    let rideSnapshot: RideSnapshot?
+    let request: JoinRideRequest?
+    let trip: PassengerTrip?
+
+    var pendingRequest: JoinRideRequest? {
+        guard request?.status == .pending else { return nil }
+        return request
+    }
+
+    var priceSummary: String {
+        if let rideSnapshot {
+            return CurrencySupport.format(cents: pricePerSeatCents, regionCode: rideSnapshot.from.state)
+        }
+        return CurrencySupport.format(cents: pricePerSeatCents, countryCode: nil)
+    }
+
+    static func request(_ request: JoinRideRequest) -> PassengerTripItem {
+        PassengerTripItem(
+            id: "request-\(request.id)",
+            statusTitle: request.status.displayTitle,
+            statusTint: request.status.tint,
+            title: "Ride request",
+            detail: request.status == .pending ? "Waiting for the driver to respond." : "Request \(request.status.displayTitle.lowercased()).",
+            seats: request.seatsRequested,
+            pricePerSeatCents: request.pricePerSeatCents,
+            sortDate: request.updatedAt.date,
+            createdSummary: request.createdSummary,
+            rideSnapshot: nil,
+            request: request,
+            trip: nil
+        )
+    }
+
+    static func trip(_ trip: PassengerTrip) -> PassengerTripItem {
+        PassengerTripItem(
+            id: "trip-\(trip.id)",
+            statusTitle: trip.status.displayTitle,
+            statusTint: trip.status.tint,
+            title: trip.rideSnapshot.routeSummary,
+            detail: "\(trip.rideSnapshot.departureSummary) with \(trip.rideSnapshot.driverDisplayName)",
+            seats: trip.seats,
+            pricePerSeatCents: trip.rideSnapshot.pricePerSeatCents,
+            sortDate: trip.updatedAt.date,
+            createdSummary: Self.itemDateFormatter.string(from: trip.createdAt.date),
+            rideSnapshot: trip.rideSnapshot,
+            request: nil,
+            trip: trip
+        )
+    }
+
+    private static let itemDateFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.dateFormat = "MMM d, h:mm a"
         return formatter
@@ -964,6 +1237,14 @@ private extension VehicleSnapshot {
 private extension String {
     func emptyFallback(_ value: String) -> String {
         trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? value : self
+    }
+
+    var routeRegionCode: String {
+        components(separatedBy: " to ")
+            .first?
+            .split(separator: ",")
+            .last
+            .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) } ?? ""
     }
 }
 
@@ -996,6 +1277,154 @@ struct TripStatusCard: View {
         .padding(16)
         .background(.white)
         .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+}
+
+struct PassengerTripCard: View {
+    let item: PassengerTripItem
+    let onCancel: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 12) {
+                Image(systemName: icon)
+                    .foregroundStyle(item.statusTint)
+                    .frame(width: 38, height: 38)
+                    .background(item.statusTint.opacity(0.14))
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(item.statusTitle)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(item.statusTint)
+                    Text(item.title)
+                        .font(.headline)
+                        .foregroundStyle(Color.tmInk)
+                    Text(item.detail)
+                        .font(.subheadline)
+                        .foregroundStyle(Color.tmSlate)
+                        .lineLimit(2)
+                }
+
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(Color.tmSlate.opacity(0.7))
+            }
+
+            HStack(spacing: 12) {
+                Label("\(item.seats) seat\(item.seats == 1 ? "" : "s")", systemImage: "person.2.fill")
+                Label(item.priceSummary, systemImage: "dollarsign.circle.fill")
+                Spacer()
+                if item.pendingRequest != nil {
+                    Button("Cancel") {
+                        onCancel()
+                    }
+                    .font(.caption.weight(.semibold))
+                    .buttonStyle(.bordered)
+                    .tint(.red)
+                }
+            }
+            .font(.caption)
+            .foregroundStyle(Color.tmSlate)
+        }
+        .padding(16)
+        .background(.white)
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+
+    private var icon: String {
+        switch item.statusTitle {
+        case "Pending":
+            return "hourglass"
+        case "Accepted", "Active":
+            return "checkmark.seal.fill"
+        case "Completed":
+            return "flag.checkered"
+        case "Cancelled", "Declined", "Expired":
+            return "xmark.circle.fill"
+        default:
+            return "ticket.fill"
+        }
+    }
+}
+
+struct PassengerTripDetailView: View {
+    let item: PassengerTripItem
+    let onCancel: () -> Void
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(item.statusTitle)
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(item.statusTint)
+                    Text(item.title)
+                        .font(.title2.bold())
+                        .foregroundStyle(Color.tmInk)
+                    Text(item.detail)
+                        .font(.subheadline)
+                        .foregroundStyle(Color.tmSlate)
+                }
+                .padding(.top, 8)
+
+                if let rideSnapshot = item.rideSnapshot {
+                    VStack(spacing: 12) {
+                        RequestDetailRow(icon: "location.fill", title: "From", value: rideSnapshot.from.displayName)
+                        RequestDetailRow(icon: "mappin.and.ellipse", title: "To", value: rideSnapshot.to.displayName)
+                        RequestDetailRow(icon: "calendar", title: "Departure", value: rideSnapshot.departureSummary)
+                        RequestDetailRow(icon: "clock.fill", title: "Expected arrival", value: rideSnapshot.arrivalSummary)
+                        RequestDetailRow(icon: "person.crop.circle.fill", title: "Driver", value: rideSnapshot.driverDisplayName)
+                    }
+                    .requestDetailSection()
+
+                    VStack(spacing: 12) {
+                        RequestDetailRow(icon: "car.fill", title: "Vehicle", value: rideSnapshot.vehicle.displayName)
+                        RequestDetailRow(icon: "fuelpump.fill", title: "Power", value: rideSnapshot.vehicle.powerType)
+                        RequestDetailRow(icon: "dollarsign.circle.fill", title: "Price", value: rideSnapshot.priceSummary)
+                    }
+                    .requestDetailSection()
+                }
+
+                if let request = item.request {
+                    VStack(spacing: 12) {
+                        RequestDetailRow(icon: "ticket.fill", title: "Request status", value: request.status.displayTitle)
+                        RequestDetailRow(icon: "person.2.fill", title: "Seats requested", value: "\(request.seatsRequested)")
+                        RequestDetailRow(icon: "banknote.fill", title: "Request total", value: request.totalPriceSummary)
+                        RequestDetailRow(icon: "clock.fill", title: "Requested", value: request.createdSummary)
+                    }
+                    .requestDetailSection()
+
+                    VStack(alignment: .leading, spacing: 12) {
+                        RequestDetailRow(icon: "location.fill", title: "Pickup", value: request.pickupNote.emptyFallback("Not added"))
+                        RequestDetailRow(icon: "mappin.and.ellipse", title: "Drop-off", value: request.dropoffNote.emptyFallback("Not added"))
+                        RequestDetailRow(icon: "suitcase.fill", title: "Luggage", value: request.luggageNote.emptyFallback("Not added"))
+                        Text(request.message.emptyFallback("No passenger message added."))
+                            .font(.subheadline)
+                            .foregroundStyle(Color.tmInk)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .requestDetailSection()
+                }
+
+                if item.pendingRequest != nil {
+                    Button(role: .destructive) {
+                        onCancel()
+                    } label: {
+                        Label("Cancel request", systemImage: "xmark.circle.fill")
+                            .font(.headline)
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(.red)
+                }
+            }
+            .padding(20)
+        }
+        .background(Color.tmMist.ignoresSafeArea())
+        .navigationTitle("Trip")
+        .navigationBarTitleDisplayMode(.inline)
     }
 }
 
@@ -1156,8 +1585,8 @@ struct DriverJoinRequestDetailView: View {
     private var requestSection: some View {
         VStack(alignment: .leading, spacing: 14) {
             RequestDetailRow(icon: "person.2.fill", title: "Seats requested", value: "\(request.seatsRequested)")
-            RequestDetailRow(icon: "dollarsign.circle.fill", title: "Price", value: "$\(request.pricePerSeatCents / 100) per seat")
-            RequestDetailRow(icon: "banknote.fill", title: "Request total", value: "$\((request.pricePerSeatCents * request.seatsRequested) / 100)")
+            RequestDetailRow(icon: "dollarsign.circle.fill", title: "Price", value: ride.map { "\(CurrencySupport.format(cents: request.pricePerSeatCents, regionCode: $0.from.state)) per seat" } ?? CurrencySupport.format(cents: request.pricePerSeatCents, countryCode: nil))
+            RequestDetailRow(icon: "banknote.fill", title: "Request total", value: ride.map { CurrencySupport.format(cents: request.pricePerSeatCents * request.seatsRequested, regionCode: $0.from.state) } ?? CurrencySupport.format(cents: request.pricePerSeatCents * request.seatsRequested, countryCode: nil))
             RequestDetailRow(icon: "clock.fill", title: "Requested", value: request.createdSummary)
             RequestDetailRow(icon: "suitcase.fill", title: "Luggage", value: request.luggageNote.emptyFallback("Not added"))
         }
@@ -1330,8 +1759,8 @@ struct DriverRequestDetailView: View {
     private var requestSection: some View {
         VStack(alignment: .leading, spacing: 14) {
             RequestDetailRow(icon: "person.2.fill", title: "Seats requested", value: "\(request.seats)")
-            RequestDetailRow(icon: "dollarsign.circle.fill", title: "Price", value: "$\(request.pricePerSeat) per seat")
-            RequestDetailRow(icon: "banknote.fill", title: "Request total", value: "$\(request.pricePerSeat * request.seats)")
+            RequestDetailRow(icon: "dollarsign.circle.fill", title: "Price", value: "\(CurrencySupport.format(dollars: Double(request.pricePerSeat), currencyCode: CurrencySupport.code(forRegionCode: request.route.routeRegionCode))) per seat")
+            RequestDetailRow(icon: "banknote.fill", title: "Request total", value: CurrencySupport.format(dollars: Double(request.pricePerSeat * request.seats), currencyCode: CurrencySupport.code(forRegionCode: request.route.routeRegionCode)))
             RequestDetailRow(icon: "clock.fill", title: "Requested", value: request.requestedAt)
             RequestDetailRow(icon: "suitcase.fill", title: "Luggage", value: request.luggage)
         }
@@ -1385,19 +1814,23 @@ struct RequestDetailRow: View {
     let value: String
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
             Image(systemName: icon)
                 .foregroundStyle(Color.tmGreen)
-                .frame(width: 28)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title)
-                    .font(.caption)
-                    .foregroundStyle(Color.tmSlate)
-                Text(value)
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(Color.tmInk)
-            }
-            Spacer()
+                .font(.subheadline.weight(.semibold))
+                .frame(width: 22)
+            Text(title)
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(Color.tmSlate)
+                .lineLimit(1)
+                .frame(width: 54, alignment: .leading)
+            Text(value)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(Color.tmInk)
+                .lineLimit(1)
+                .minimumScaleFactor(0.72)
+                .frame(maxWidth: .infinity, alignment: .trailing)
+                .layoutPriority(1)
         }
     }
 }
