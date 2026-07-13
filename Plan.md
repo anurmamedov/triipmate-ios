@@ -148,7 +148,7 @@ This plan reflects the active Xcode target as of July 2026. The project now uses
 - Restricted profile-photo uploads/downloads to `profilePhotos/{uid}.jpg`.
 - Added `./scripts/test-security-rules.sh` for disposable-user Firestore and Storage rule checks.
 - Updated profile emulator testing to use owner-scoped profile photo paths.
-- Still need to replace authenticated collection scans with server-side filtered Firestore queries before fully restricting list reads.
+- Replaced authenticated collection scans for rides, ride requests, trips, and conversations with server-side filtered Firestore queries.
 - Still need atomic seat-booking tests so two passengers cannot overbook the same ride at the same time.
 - Still need Swift unit test and UI test targets in Xcode.
 - Still need CI builds for pull requests, accessibility checks, offline behavior tests, and multiple iPhone size checks.

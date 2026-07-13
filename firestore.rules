@@ -81,14 +81,17 @@ service cloud.firestore {
     }
 
     match /rides/{rideId} {
-      allow read: if isSignedIn();
+      allow read: if isSignedIn()
+        && (resource.data.status in ['published', 'active']
+          || resource.data.driverUid == request.auth.uid);
       allow create: if isRideOwnerPayload();
       allow update: if isExistingRideOwner();
       allow delete: if isSignedIn() && resource.data.driverUid == request.auth.uid;
     }
 
     match /rideRequests/{requestId} {
-      allow read: if isSignedIn();
+      allow read: if isSignedIn()
+        && (resource.data.passengerUid == request.auth.uid || isRideDriver(resource.data.rideId));
       allow create: if isRequestPassenger();
       allow update: if isExistingRequestPassenger()
         || (isRideDriver(resource.data.rideId)
@@ -99,7 +102,8 @@ service cloud.firestore {
     }
 
     match /trips/{tripId} {
-      allow read: if isSignedIn();
+      allow read: if isSignedIn()
+        && (resource.data.passengerUid == request.auth.uid || resource.data.driverUid == request.auth.uid);
       allow create: if isTripParticipant();
       allow update: if isExistingTripParticipant();
       allow delete: if isSignedIn()
@@ -107,7 +111,7 @@ service cloud.firestore {
     }
 
     match /conversations/{conversationId} {
-      allow read: if isSignedIn();
+      allow read: if isExistingConversationParticipant();
       allow create: if isConversationParticipant(request.resource.data);
       allow update: if isExistingConversationParticipant()
         && isConversationParticipant(request.resource.data)

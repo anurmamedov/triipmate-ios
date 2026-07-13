@@ -233,52 +233,28 @@ struct LocalFirestoreRideService {
 
     func fetchDriverRides(uid: String, idToken: String) async throws -> [MarketplaceRide] {
         try config.validate()
-        var request = URLRequest(url: ridesURL)
-        request.setValue("Bearer \(idToken)", forHTTPHeaderField: "Authorization")
-
-        let (data, response) = try await URLSession.shared.data(for: request)
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw LocalAuthError.invalidResponse
-        }
-
-        if httpResponse.statusCode == 404 {
-            return []
-        }
-
-        guard (200..<300).contains(httpResponse.statusCode) else {
-            throw LocalAuthError.invalidResponse
-        }
-
-        let collection = try JSONDecoder().decode(FirestoreRideCollection.self, from: data)
-        return (collection.documents ?? [])
+        let documents: [FirestoreDecodedRideDocument] = try await fetchFirestoreDocuments(
+            collectionId: FirestoreCollection.rides,
+            idToken: idToken,
+            filter: .fieldEquals("driverUid", .string(uid)),
+            config: config
+        )
+        return documents
             .compactMap { $0.marketplaceRide }
-            .filter { $0.driverUid == uid }
             .sorted { $0.departureAt.date < $1.departureAt.date }
     }
 
     func fetchSearchableRides(idToken: String) async throws -> [MarketplaceRide] {
         try config.validate()
-        var request = URLRequest(url: ridesURL)
-        request.setValue("Bearer \(idToken)", forHTTPHeaderField: "Authorization")
-
-        let (data, response) = try await URLSession.shared.data(for: request)
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw LocalAuthError.invalidResponse
-        }
-
-        if httpResponse.statusCode == 404 {
-            return []
-        }
-
-        guard (200..<300).contains(httpResponse.statusCode) else {
-            throw LocalAuthError.invalidResponse
-        }
-
         let now = Date()
-        let collection = try JSONDecoder().decode(FirestoreRideCollection.self, from: data)
-        return (collection.documents ?? [])
+        let documents: [FirestoreDecodedRideDocument] = try await fetchFirestoreDocuments(
+            collectionId: FirestoreCollection.rides,
+            idToken: idToken,
+            filter: .fieldIn("status", [.string(RideStatus.published.rawValue), .string(RideStatus.active.rawValue)]),
+            config: config
+        )
+        return documents
             .compactMap { $0.marketplaceRide }
-            .filter { [.published, .active].contains($0.status) }
             .filter { $0.availableSeats > 0 }
             .filter { $0.departureAt.date >= now }
             .sorted {
@@ -330,52 +306,48 @@ struct LocalFirestoreRideRequestService {
     }
 
     func fetchPassengerRequests(uid: String, idToken: String) async throws -> [JoinRideRequest] {
-        let requests = try await fetchAllRequests(idToken: idToken)
-        return requests
-            .filter { $0.passengerUid == uid }
+        try config.validate()
+        let documents: [FirestoreDecodedRideRequestDocument] = try await fetchFirestoreDocuments(
+            collectionId: FirestoreCollection.rideRequests,
+            idToken: idToken,
+            filter: .fieldEquals("passengerUid", .string(uid)),
+            config: config
+        )
+        return documents
+            .compactMap { $0.joinRideRequest }
             .sorted { $0.createdAt.date > $1.createdAt.date }
     }
 
     func fetchDriverRequests(rideIds: Set<String>, idToken: String) async throws -> [JoinRideRequest] {
         guard !rideIds.isEmpty else { return [] }
 
-        let requests = try await fetchAllRequests(idToken: idToken)
-        return requests
-            .filter { rideIds.contains($0.rideId) }
-            .sorted { $0.createdAt.date > $1.createdAt.date }
-    }
-
-    private func fetchAllRequests(idToken: String) async throws -> [JoinRideRequest] {
         try config.validate()
-        var urlRequest = URLRequest(url: requestsURL)
-        urlRequest.setValue("Bearer \(idToken)", forHTTPHeaderField: "Authorization")
-
-        let (data, response) = try await URLSession.shared.data(for: urlRequest)
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw LocalAuthError.invalidResponse
-        }
-
-        if httpResponse.statusCode == 404 {
-            return []
-        }
-
-        guard (200..<300).contains(httpResponse.statusCode) else {
-            throw LocalAuthError.invalidResponse
-        }
-
-        let collection = try JSONDecoder().decode(FirestoreRideRequestCollection.self, from: data)
-        return (collection.documents ?? []).compactMap { $0.joinRideRequest }
+        let documents: [FirestoreDecodedRideRequestDocument] = try await fetchFirestoreDocuments(
+            collectionId: FirestoreCollection.rideRequests,
+            idToken: idToken,
+            filters: Array(rideIds).map { .fieldEquals("rideId", .string($0)) },
+            compositeOperator: .or,
+            config: config
+        )
+        return documents
+            .compactMap { $0.joinRideRequest }
+            .sorted { $0.createdAt.date > $1.createdAt.date }
     }
 }
 
 struct LocalFirestorePassengerTripService {
-    private let projectId = "demo-triipmate-local"
+    private let config: FirebaseBackendConfig
+
+    init(config: FirebaseBackendConfig = .current) {
+        self.config = config
+    }
 
     private var tripsURL: URL {
-        URL(string: "http://127.0.0.1:8080/v1/projects/\(projectId)/databases/(default)/documents/trips")!
+        config.firestoreDocumentsURL.appendingPathComponent("trips")
     }
 
     func save(_ trip: PassengerTrip, idToken: String) async throws {
+        try config.validate()
         var request = URLRequest(url: tripsURL.appendingPathComponent(trip.id))
         request.httpMethod = "PATCH"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -390,50 +362,45 @@ struct LocalFirestorePassengerTripService {
     }
 
     func fetchPassengerTrips(uid: String, idToken: String) async throws -> [PassengerTrip] {
-        let trips = try await fetchAllTrips(idToken: idToken)
-        return trips
-            .filter { $0.passengerUid == uid }
+        try config.validate()
+        let documents: [FirestoreDecodedPassengerTripDocument] = try await fetchFirestoreDocuments(
+            collectionId: FirestoreCollection.trips,
+            idToken: idToken,
+            filter: .fieldEquals("passengerUid", .string(uid)),
+            config: config
+        )
+        return documents
+            .compactMap { $0.passengerTrip }
             .sorted { $0.createdAt.date > $1.createdAt.date }
     }
 
     func fetchRideTrips(rideId: String, idToken: String) async throws -> [PassengerTrip] {
-        let trips = try await fetchAllTrips(idToken: idToken)
-        return trips
-            .filter { $0.rideId == rideId }
-            .sorted { $0.createdAt.date > $1.createdAt.date }
-    }
-
-    private func fetchAllTrips(idToken: String) async throws -> [PassengerTrip] {
-        var request = URLRequest(url: tripsURL)
-        request.setValue("Bearer \(idToken)", forHTTPHeaderField: "Authorization")
-
-        let (data, response) = try await URLSession.shared.data(for: request)
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw LocalAuthError.invalidResponse
-        }
-
-        if httpResponse.statusCode == 404 {
-            return []
-        }
-
-        guard (200..<300).contains(httpResponse.statusCode) else {
-            throw LocalAuthError.invalidResponse
-        }
-
-        let collection = try JSONDecoder().decode(FirestorePassengerTripCollection.self, from: data)
-        return (collection.documents ?? [])
+        try config.validate()
+        let documents: [FirestoreDecodedPassengerTripDocument] = try await fetchFirestoreDocuments(
+            collectionId: FirestoreCollection.trips,
+            idToken: idToken,
+            filter: .fieldEquals("rideId", .string(rideId)),
+            config: config
+        )
+        return documents
             .compactMap { $0.passengerTrip }
+            .sorted { $0.createdAt.date > $1.createdAt.date }
     }
 }
 
 struct LocalFirestoreMessagingService {
-    private let projectId = "demo-triipmate-local"
+    private let config: FirebaseBackendConfig
+
+    init(config: FirebaseBackendConfig = .current) {
+        self.config = config
+    }
 
     private var conversationsURL: URL {
-        URL(string: "http://127.0.0.1:8080/v1/projects/\(projectId)/databases/(default)/documents/conversations")!
+        config.firestoreDocumentsURL.appendingPathComponent("conversations")
     }
 
     func saveConversation(_ conversation: RideConversation, idToken: String) async throws {
+        try config.validate()
         var request = URLRequest(url: conversationsURL.appendingPathComponent(conversation.id))
         request.httpMethod = "PATCH"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -448,32 +415,22 @@ struct LocalFirestoreMessagingService {
     }
 
     func fetchConversations(uid: String, idToken: String) async throws -> [RideConversation] {
-        var request = URLRequest(url: conversationsURL)
-        request.setValue("Bearer \(idToken)", forHTTPHeaderField: "Authorization")
-
-        let (data, response) = try await URLSession.shared.data(for: request)
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw LocalAuthError.invalidResponse
-        }
-
-        if httpResponse.statusCode == 404 {
-            return []
-        }
-
-        guard (200..<300).contains(httpResponse.statusCode) else {
-            throw LocalAuthError.invalidResponse
-        }
-
-        let collection = try JSONDecoder().decode(FirestoreConversationCollection.self, from: data)
-        return (collection.documents ?? [])
+        try config.validate()
+        let documents: [FirestoreDecodedConversationDocument] = try await fetchFirestoreDocuments(
+            collectionId: FirestoreCollection.conversations,
+            idToken: idToken,
+            filter: .fieldArrayContains("participantUids", .string(uid)),
+            config: config
+        )
+        return documents
             .compactMap(\.conversation)
-            .filter { $0.participantUids.contains(uid) }
             .sorted {
                 ($0.lastMessageAt?.date ?? $0.updatedAt.date) > ($1.lastMessageAt?.date ?? $1.updatedAt.date)
             }
     }
 
     func sendMessage(body: String, conversation: RideConversation, senderUid: String, idToken: String) async throws -> RideMessage {
+        try config.validate()
         let cleanBody = body.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !cleanBody.isEmpty else {
             throw LocalAuthError.invalidInput("Enter a message before sending.")
@@ -517,6 +474,7 @@ struct LocalFirestoreMessagingService {
     }
 
     func fetchMessages(conversationId: String, idToken: String) async throws -> [RideMessage] {
+        try config.validate()
         var request = URLRequest(url: messagesURL(conversationId: conversationId))
         request.setValue("Bearer \(idToken)", forHTTPHeaderField: "Authorization")
 
@@ -540,6 +498,7 @@ struct LocalFirestoreMessagingService {
     }
 
     func markRead(conversation: RideConversation, uid: String, idToken: String) async throws -> RideConversation {
+        try config.validate()
         guard conversation.unreadCountsByUid[uid, default: 0] > 0 else {
             return conversation
         }
@@ -865,6 +824,152 @@ private struct FirestoreConversationCollection: Decodable {
 
 private struct FirestoreMessageCollection: Decodable {
     let documents: [FirestoreDecodedMessageDocument]?
+}
+
+private enum FirestoreCompositeOperator: String, Encodable {
+    case and = "AND"
+    case or = "OR"
+}
+
+private enum FirestoreQueryFilter {
+    case fieldEquals(String, FirestoreRideValue)
+    case fieldIn(String, [FirestoreRideValue])
+    case fieldArrayContains(String, FirestoreRideValue)
+
+    var requestFilter: FirestoreStructuredQuery.Filter {
+        switch self {
+        case .fieldEquals(let name, let value):
+            return .field(name: name, op: "EQUAL", value: value)
+        case .fieldIn(let name, let values):
+            return .field(name: name, op: "IN", value: .array(values))
+        case .fieldArrayContains(let name, let value):
+            return .field(name: name, op: "ARRAY_CONTAINS", value: value)
+        }
+    }
+}
+
+private struct FirestoreRunQueryRequest: Encodable {
+    let structuredQuery: FirestoreStructuredQuery
+}
+
+private struct FirestoreStructuredQuery: Encodable {
+    let from: [CollectionSelector]
+    let `where`: Filter?
+
+    init(collectionId: String, filter: Filter?) {
+        from = [CollectionSelector(collectionId: collectionId)]
+        self.where = filter
+    }
+
+    struct CollectionSelector: Encodable {
+        let collectionId: String
+    }
+
+    enum Filter: Encodable {
+        case field(name: String, op: String, value: FirestoreRideValue)
+        case composite(operator: FirestoreCompositeOperator, filters: [Filter])
+
+        func encode(to encoder: Encoder) throws {
+            var container = encoder.container(keyedBy: CodingKeys.self)
+            switch self {
+            case .field(let name, let op, let value):
+                try container.encode(
+                    FieldFilter(
+                        field: FieldReference(fieldPath: name),
+                        op: op,
+                        value: value
+                    ),
+                    forKey: .fieldFilter
+                )
+            case .composite(let operatorValue, let filters):
+                try container.encode(
+                    CompositeFilter(op: operatorValue, filters: filters),
+                    forKey: .compositeFilter
+                )
+            }
+        }
+
+        private enum CodingKeys: String, CodingKey {
+            case fieldFilter
+            case compositeFilter
+        }
+
+        private struct FieldFilter: Encodable {
+            let field: FieldReference
+            let op: String
+            let value: FirestoreRideValue
+        }
+
+        private struct FieldReference: Encodable {
+            let fieldPath: String
+        }
+
+        private struct CompositeFilter: Encodable {
+            let op: FirestoreCompositeOperator
+            let filters: [Filter]
+        }
+    }
+}
+
+private struct FirestoreRunQueryResponse<Document: Decodable>: Decodable {
+    let document: Document?
+}
+
+private func fetchFirestoreDocuments<Document: Decodable>(
+    collectionId: String,
+    idToken: String,
+    filter: FirestoreQueryFilter? = nil,
+    config: FirebaseBackendConfig
+) async throws -> [Document] {
+    try await fetchFirestoreDocuments(
+        collectionId: collectionId,
+        idToken: idToken,
+        filters: filter.map { [$0] } ?? [],
+        compositeOperator: .and,
+        config: config
+    )
+}
+
+private func fetchFirestoreDocuments<Document: Decodable>(
+    collectionId: String,
+    idToken: String,
+    filters: [FirestoreQueryFilter],
+    compositeOperator: FirestoreCompositeOperator,
+    config: FirebaseBackendConfig
+) async throws -> [Document] {
+    try config.validate()
+
+    let structuredFilter: FirestoreStructuredQuery.Filter?
+    if filters.isEmpty {
+        structuredFilter = nil
+    } else if filters.count == 1 {
+        structuredFilter = filters[0].requestFilter
+    } else {
+        structuredFilter = .composite(operator: compositeOperator, filters: filters.map(\.requestFilter))
+    }
+
+    let requestBody = FirestoreRunQueryRequest(
+        structuredQuery: FirestoreStructuredQuery(collectionId: collectionId, filter: structuredFilter)
+    )
+
+    let queryURL = URL(string: "\(config.firestoreDocumentsURL.absoluteString):runQuery")!
+    var request = URLRequest(url: queryURL)
+    request.httpMethod = "POST"
+    request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+    request.setValue("Bearer \(idToken)", forHTTPHeaderField: "Authorization")
+    request.httpBody = try JSONEncoder().encode(requestBody)
+
+    let (data, response) = try await URLSession.shared.data(for: request)
+    guard let httpResponse = response as? HTTPURLResponse else {
+        throw LocalAuthError.invalidResponse
+    }
+
+    guard (200..<300).contains(httpResponse.statusCode) else {
+        throw LocalAuthError.server("Firestore query returned HTTP \(httpResponse.statusCode).")
+    }
+
+    let responses = try JSONDecoder().decode([FirestoreRunQueryResponse<Document>].self, from: data)
+    return responses.compactMap(\.document)
 }
 
 private struct FirestoreDecodedRideDocument: Decodable {
