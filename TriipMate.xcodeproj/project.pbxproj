@@ -24,6 +24,7 @@
 		8A0000010000000000000023 /* LocalFirebaseServices.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A0000010000000000000024 /* LocalFirebaseServices.swift */; };
 		8A0000010000000000000025 /* MarketplaceModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A0000010000000000000026 /* MarketplaceModels.swift */; };
 		8A0000010000000000000027 /* AuthSessionStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A0000010000000000000028 /* AuthSessionStore.swift */; };
+		8A0000010000000000000029 /* AppEnvironment.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A000001000000000000002A /* AppEnvironment.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -47,6 +48,7 @@
 		8A0000010000000000000024 /* LocalFirebaseServices.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalFirebaseServices.swift; sourceTree = "<group>"; };
 		8A0000010000000000000026 /* MarketplaceModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarketplaceModels.swift; sourceTree = "<group>"; };
 		8A0000010000000000000028 /* AuthSessionStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthSessionStore.swift; sourceTree = "<group>"; };
+		8A000001000000000000002A /* AppEnvironment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppEnvironment.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -92,12 +94,21 @@
 		8A00000100000000000000A1 /* Core */ = {
 			isa = PBXGroup;
 			children = (
+				8A00000100000000000000AC /* Config */,
 				8A00000100000000000000A3 /* Models */,
 				8A00000100000000000000A4 /* Services */,
 				8A00000100000000000000A5 /* Session */,
 				8A00000100000000000000A6 /* DesignSystem */,
 			);
 			path = Core;
+			sourceTree = "<group>";
+		};
+		8A00000100000000000000AC /* Config */ = {
+			isa = PBXGroup;
+			children = (
+				8A000001000000000000002A /* AppEnvironment.swift */,
+			);
+			path = Config;
 			sourceTree = "<group>";
 		};
 		8A00000100000000000000A2 /* Features */ = {
@@ -281,6 +292,7 @@
 				8A000001000000000000000E /* AuthModels.swift in Sources */,
 				8A0000010000000000000025 /* MarketplaceModels.swift in Sources */,
 				8A000001000000000000000F /* AppSession.swift in Sources */,
+				8A0000010000000000000029 /* AppEnvironment.swift in Sources */,
 				8A0000010000000000000023 /* LocalFirebaseServices.swift in Sources */,
 				8A0000010000000000000027 /* AuthSessionStore.swift in Sources */,
 			);

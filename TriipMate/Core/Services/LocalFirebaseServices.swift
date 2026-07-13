@@ -1,14 +1,25 @@
 import Foundation
 
 struct LocalStorageProfilePhotoService {
-    private let bucket = "demo-triipmate-local.appspot.com"
+    private let config: FirebaseBackendConfig
 
-    private var baseURL: URL {
-        URL(string: "http://127.0.0.1:9199/v0/b/\(bucket)/o")!
+    init(config: FirebaseBackendConfig = .current) {
+        self.config = config
+    }
+
+    private func baseURL() throws -> URL {
+        try config.validate()
+        guard config.isStorageEnabled, let bucket = config.storageBucket else {
+            throw LocalAuthError.invalidInput("Storage is not enabled for staging yet. Profile photos are local-only for now.")
+        }
+        if config.mode == .local {
+            return URL(string: "http://127.0.0.1:9199/v0/b/\(bucket)/o")!
+        }
+        return URL(string: "https://firebasestorage.googleapis.com/v0/b/\(bucket)/o")!
     }
 
     func upload(imageData: Data, path: String, idToken: String) async throws {
-        var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false)!
+        var components = URLComponents(url: try baseURL(), resolvingAgainstBaseURL: false)!
         components.queryItems = [
             URLQueryItem(name: "uploadType", value: "media"),
             URLQueryItem(name: "name", value: path)
@@ -28,7 +39,7 @@ struct LocalStorageProfilePhotoService {
 
     func download(path: String, idToken: String) async throws -> Data {
         let encodedPath = path.storagePathEncoded
-        var components = URLComponents(string: "\(baseURL.absoluteString)/\(encodedPath)")!
+        var components = URLComponents(string: "\((try baseURL()).absoluteString)/\(encodedPath)")!
         components.queryItems = [URLQueryItem(name: "alt", value: "media")]
 
         var request = URLRequest(url: components.url!)
@@ -51,13 +62,18 @@ private extension String {
 }
 
 struct LocalFirestoreProfileService {
-    private let projectId = "demo-triipmate-local"
+    private let config: FirebaseBackendConfig
+
+    init(config: FirebaseBackendConfig = .current) {
+        self.config = config
+    }
 
     private var baseURL: URL {
-        URL(string: "http://127.0.0.1:8080/v1/projects/\(projectId)/databases/(default)/documents/users")!
+        config.firestoreDocumentsURL.appendingPathComponent("users")
     }
 
     func save(_ profile: UserProfile, idToken: String) async throws {
+        try config.validate()
         var request = URLRequest(url: baseURL.appendingPathComponent(profile.uid))
         request.httpMethod = "PATCH"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -71,6 +87,7 @@ struct LocalFirestoreProfileService {
     }
 
     func fetch(uid: String, idToken: String) async throws -> UserProfile {
+        try config.validate()
         var request = URLRequest(url: baseURL.appendingPathComponent(uid))
         request.setValue("Bearer \(idToken)", forHTTPHeaderField: "Authorization")
 
@@ -93,13 +110,18 @@ struct LocalFirestoreProfileService {
 }
 
 struct LocalFirestoreVehicleService {
-    private let projectId = "demo-triipmate-local"
+    private let config: FirebaseBackendConfig
+
+    init(config: FirebaseBackendConfig = .current) {
+        self.config = config
+    }
 
     private var usersURL: URL {
-        URL(string: "http://127.0.0.1:8080/v1/projects/\(projectId)/databases/(default)/documents/users")!
+        config.firestoreDocumentsURL.appendingPathComponent("users")
     }
 
     func save(_ vehicle: SavedVehicle, uid: String, idToken: String) async throws {
+        try config.validate()
         let url = usersURL
             .appendingPathComponent(uid)
             .appendingPathComponent("vehicles")
@@ -126,6 +148,7 @@ struct LocalFirestoreVehicleService {
     }
 
     func fetchAll(uid: String, idToken: String) async throws -> [SavedVehicle] {
+        try config.validate()
         let url = usersURL.appendingPathComponent(uid).appendingPathComponent("vehicles")
         var request = URLRequest(url: url)
         request.setValue("Bearer \(idToken)", forHTTPHeaderField: "Authorization")
@@ -158,13 +181,18 @@ struct LocalFirestoreVehicleService {
 }
 
 struct LocalFirestoreRideService {
-    private let projectId = "demo-triipmate-local"
+    private let config: FirebaseBackendConfig
+
+    init(config: FirebaseBackendConfig = .current) {
+        self.config = config
+    }
 
     private var ridesURL: URL {
-        URL(string: "http://127.0.0.1:8080/v1/projects/\(projectId)/databases/(default)/documents/rides")!
+        config.firestoreDocumentsURL.appendingPathComponent("rides")
     }
 
     func save(_ ride: MarketplaceRide, idToken: String) async throws {
+        try config.validate()
         var request = URLRequest(url: ridesURL.appendingPathComponent(ride.id))
         request.httpMethod = "PATCH"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -179,6 +207,7 @@ struct LocalFirestoreRideService {
     }
 
     func fetchDriverRides(uid: String, idToken: String) async throws -> [MarketplaceRide] {
+        try config.validate()
         var request = URLRequest(url: ridesURL)
         request.setValue("Bearer \(idToken)", forHTTPHeaderField: "Authorization")
 
@@ -203,6 +232,7 @@ struct LocalFirestoreRideService {
     }
 
     func fetchSearchableRides(idToken: String) async throws -> [MarketplaceRide] {
+        try config.validate()
         var request = URLRequest(url: ridesURL)
         request.setValue("Bearer \(idToken)", forHTTPHeaderField: "Authorization")
 
@@ -235,6 +265,7 @@ struct LocalFirestoreRideService {
     }
 
     func deleteRide(id: String, idToken: String) async throws {
+        try config.validate()
         var request = URLRequest(url: ridesURL.appendingPathComponent(id))
         request.httpMethod = "DELETE"
         request.setValue("Bearer \(idToken)", forHTTPHeaderField: "Authorization")
@@ -248,13 +279,18 @@ struct LocalFirestoreRideService {
 }
 
 struct LocalFirestoreRideRequestService {
-    private let projectId = "demo-triipmate-local"
+    private let config: FirebaseBackendConfig
+
+    init(config: FirebaseBackendConfig = .current) {
+        self.config = config
+    }
 
     private var requestsURL: URL {
-        URL(string: "http://127.0.0.1:8080/v1/projects/\(projectId)/databases/(default)/documents/rideRequests")!
+        config.firestoreDocumentsURL.appendingPathComponent("rideRequests")
     }
 
     func save(_ request: JoinRideRequest, idToken: String) async throws {
+        try config.validate()
         var urlRequest = URLRequest(url: requestsURL.appendingPathComponent(request.id))
         urlRequest.httpMethod = "PATCH"
         urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -285,6 +321,7 @@ struct LocalFirestoreRideRequestService {
     }
 
     private func fetchAllRequests(idToken: String) async throws -> [JoinRideRequest] {
+        try config.validate()
         var urlRequest = URLRequest(url: requestsURL)
         urlRequest.setValue("Bearer \(idToken)", forHTTPHeaderField: "Authorization")
 
@@ -693,9 +730,11 @@ private extension VehicleSnapshot {
 }
 
 struct LocalFirebaseAuthService {
-    private let baseURL = URL(string: "http://127.0.0.1:9099/identitytoolkit.googleapis.com/v1")!
-    private let tokenURL = URL(string: "http://127.0.0.1:9099/securetoken.googleapis.com/v1/token")!
-    private let apiKey = "triipmate-local"
+    private let config: FirebaseBackendConfig
+
+    init(config: FirebaseBackendConfig = .current) {
+        self.config = config
+    }
 
     func register(email: String, password: String) async throws -> AuthUser {
         try await sendAuthRequest(endpoint: "accounts:signUp", email: email, password: password)
@@ -706,8 +745,9 @@ struct LocalFirebaseAuthService {
     }
 
     func restore(refreshToken: String) async throws -> AuthUser {
-        var components = URLComponents(url: tokenURL, resolvingAgainstBaseURL: false)!
-        components.queryItems = [URLQueryItem(name: "key", value: apiKey)]
+        try config.validate()
+        var components = URLComponents(url: config.tokenURL, resolvingAgainstBaseURL: false)!
+        components.queryItems = [URLQueryItem(name: "key", value: config.apiKey)]
 
         var request = URLRequest(url: components.url!)
         request.httpMethod = "POST"
@@ -728,8 +768,9 @@ struct LocalFirebaseAuthService {
     }
 
     func sendPasswordReset(email: String) async throws {
-        var components = URLComponents(url: baseURL.appendingPathComponent("accounts:sendOobCode"), resolvingAgainstBaseURL: false)!
-        components.queryItems = [URLQueryItem(name: "key", value: apiKey)]
+        try config.validate()
+        var components = URLComponents(url: config.authBaseURL.appendingPathComponent("accounts:sendOobCode"), resolvingAgainstBaseURL: false)!
+        components.queryItems = [URLQueryItem(name: "key", value: config.apiKey)]
 
         var request = URLRequest(url: components.url!)
         request.httpMethod = "POST"
@@ -742,8 +783,9 @@ struct LocalFirebaseAuthService {
     }
 
     func updateEmail(idToken: String, email: String) async throws -> AuthUser {
-        var components = URLComponents(url: baseURL.appendingPathComponent("accounts:update"), resolvingAgainstBaseURL: false)!
-        components.queryItems = [URLQueryItem(name: "key", value: apiKey)]
+        try config.validate()
+        var components = URLComponents(url: config.authBaseURL.appendingPathComponent("accounts:update"), resolvingAgainstBaseURL: false)!
+        components.queryItems = [URLQueryItem(name: "key", value: config.apiKey)]
 
         var request = URLRequest(url: components.url!)
         request.httpMethod = "POST"
@@ -771,12 +813,13 @@ struct LocalFirebaseAuthService {
             throw LocalAuthError.server(errorResponse.error.message.authFriendlyMessage)
         }
 
-        throw LocalAuthError.invalidResponse
+        throw LocalAuthError.server("Firebase \(config.mode.rawValue) auth returned HTTP \(httpResponse.statusCode).")
     }
 
     private func sendAuthRequest(endpoint: String, email: String, password: String) async throws -> AuthUser {
-        var components = URLComponents(url: baseURL.appendingPathComponent(endpoint), resolvingAgainstBaseURL: false)!
-        components.queryItems = [URLQueryItem(name: "key", value: apiKey)]
+        try config.validate()
+        var components = URLComponents(url: config.authBaseURL.appendingPathComponent(endpoint), resolvingAgainstBaseURL: false)!
+        components.queryItems = [URLQueryItem(name: "key", value: config.apiKey)]
 
         var request = URLRequest(url: components.url!)
         request.httpMethod = "POST"
@@ -802,12 +845,13 @@ struct LocalFirebaseAuthService {
             throw LocalAuthError.server(errorResponse.error.message.authFriendlyMessage)
         }
 
-        throw LocalAuthError.invalidResponse
+        throw LocalAuthError.server("Firebase \(config.mode.rawValue) auth returned HTTP \(httpResponse.statusCode).")
     }
 
     private func lookup(idToken: String) async throws -> AccountLookupUser {
-        var components = URLComponents(url: baseURL.appendingPathComponent("accounts:lookup"), resolvingAgainstBaseURL: false)!
-        components.queryItems = [URLQueryItem(name: "key", value: apiKey)]
+        try config.validate()
+        var components = URLComponents(url: config.authBaseURL.appendingPathComponent("accounts:lookup"), resolvingAgainstBaseURL: false)!
+        components.queryItems = [URLQueryItem(name: "key", value: config.apiKey)]
 
         var request = URLRequest(url: components.url!)
         request.httpMethod = "POST"
@@ -832,7 +876,7 @@ struct LocalFirebaseAuthService {
         if let errorResponse = try? JSONDecoder().decode(AuthErrorResponse.self, from: data) {
             throw LocalAuthError.server(errorResponse.error.message.authFriendlyMessage)
         }
-        throw LocalAuthError.invalidResponse
+        throw LocalAuthError.server("Firebase \(config.mode.rawValue) auth returned HTTP \(httpResponse.statusCode).")
     }
 }
 

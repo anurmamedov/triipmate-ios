@@ -103,7 +103,7 @@ enum LocalAuthError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .invalidResponse:
-            return "The local Firebase emulator returned an unexpected response."
+            return "Firebase returned an unexpected response. Check that the selected backend is configured correctly."
         case .server(let message):
             return message
         case .profileNotFound:

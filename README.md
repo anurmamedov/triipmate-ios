@@ -120,9 +120,26 @@ This disposable-user test covers personal information, role changes, persisted s
 ### 2. Run the iOS app
 
 1. Open `TriipMate.xcodeproj`.
-2. Select the `TriipMate` scheme.
+2. Select the `TriipMate Local` scheme for emulator testing, or `TriipMate Staging` for shared Firebase testing.
 3. Select an iPhone simulator.
 4. Run the app with `Command-R`.
+
+## Local vs Staging
+
+The app supports two run modes through Xcode schemes:
+
+| Scheme | Backend |
+|---|---|
+| `TriipMate Local` | Local Firebase emulators on your Mac |
+| `TriipMate Staging` | Shared online Firebase project |
+
+The shared staging scheme includes the staging Firebase project ID and API key as run-time environment values, so a local plist is not required for normal staging tests. If you later add Firebase SDK features, place the downloaded Firebase config here:
+
+```text
+TriipMate/Core/Config/GoogleService-Info.plist
+```
+
+That file is intentionally ignored by Git and should not be committed. Storage is skipped for staging right now, so profile photo upload remains local-only until the Firebase project is upgraded and Storage is enabled.
 
 ## Structural Change Checklist
 
