@@ -639,23 +639,8 @@ final class AppSession: ObservableObject {
             return false
         }
 
-        guard request.status == .pending else {
-            authError = "This request has already been decided."
-            return false
-        }
-
         guard let ride = driverRides.first(where: { $0.id == request.rideId }) else {
             authError = "Could not find the ride for this request."
-            return false
-        }
-
-        guard ride.driverUid == authUser.uid else {
-            authError = "You can only manage requests for your own rides."
-            return false
-        }
-
-        guard ride.availableSeats >= request.seatsRequested else {
-            authError = "This ride does not have enough open seats anymore."
             return false
         }
 
@@ -664,38 +649,19 @@ final class AppSession: ObservableObject {
         defer { isRideRequestWorking = false }
 
         do {
-            let remainingSeats = ride.availableSeats - request.seatsRequested
-            let updatedRide = ride.updated(
-                status: remainingSeats == 0 ? .full : ride.status,
-                availableSeats: remainingSeats
-            )
-            let updatedRequest = request.updated(status: .accepted)
-            let trip = PassengerTrip(
-                id: request.id,
-                requestId: request.id,
-                rideId: ride.id,
-                passengerUid: request.passengerUid,
-                driverUid: ride.driverUid,
-                seats: request.seatsRequested,
-                status: .accepted,
-                rideSnapshot: ride.snapshot,
-                createdAt: updatedRequest.decidedAt ?? FirestoreTimestamp(date: Date()),
-                updatedAt: updatedRequest.updatedAt
+            let decision = try RideAcceptancePolicy.accept(
+                request: request,
+                ride: ride,
+                driverUid: authUser.uid
             )
 
-            try await rideService.save(updatedRide, idToken: authUser.idToken)
-            try await rideRequestService.save(updatedRequest, idToken: authUser.idToken)
-            try await passengerTripService.save(trip, idToken: authUser.idToken)
-            try await messagingService.saveConversation(
-                RideConversation.acceptedRideConversation(
-                    request: updatedRequest,
-                    ride: ride
-                ),
-                idToken: authUser.idToken
-            )
-            replaceDriverRide(updatedRide)
-            replaceDriverRequest(updatedRequest)
-            replaceSearchableRide(updatedRide)
+            try await rideService.save(decision.updatedRide, idToken: authUser.idToken)
+            try await rideRequestService.save(decision.updatedRequest, idToken: authUser.idToken)
+            try await passengerTripService.save(decision.passengerTrip, idToken: authUser.idToken)
+            try await messagingService.saveConversation(decision.conversation, idToken: authUser.idToken)
+            replaceDriverRide(decision.updatedRide)
+            replaceDriverRequest(decision.updatedRequest)
+            replaceSearchableRide(decision.updatedRide)
             conversations = (try? await messagingService.fetchConversations(uid: authUser.uid, idToken: authUser.idToken)) ?? conversations
             return true
         } catch {
@@ -1019,175 +985,6 @@ private extension SavedVehicle {
     }
 }
 
-extension MarketplaceRide {
-    var snapshot: RideSnapshot {
-        RideSnapshot(
-            rideId: id,
-            driverUid: driverUid,
-            driverDisplayName: driverDisplayName,
-            from: from,
-            to: to,
-            departureAt: departureAt,
-            expectedArrivalAt: expectedArrivalAt,
-            pricePerSeatCents: pricePerSeatCents,
-            vehicle: vehicle
-        )
-    }
-
-    func updated(
-        status: RideStatus? = nil,
-        availableSeats: Int? = nil,
-        totalSeats: Int? = nil,
-        pricePerSeatCents: Int? = nil,
-        notes: String? = nil
-    ) -> MarketplaceRide {
-        MarketplaceRide(
-            id: id,
-            driverUid: driverUid,
-            driverDisplayName: driverDisplayName,
-            driverProfilePhotoPath: driverProfilePhotoPath,
-            from: from,
-            to: to,
-            departureAt: departureAt,
-            expectedArrivalAt: expectedArrivalAt,
-            estimatedDurationMinutes: estimatedDurationMinutes,
-            availableSeats: availableSeats ?? self.availableSeats,
-            totalSeats: totalSeats ?? self.totalSeats,
-            pricePerSeatCents: pricePerSeatCents ?? self.pricePerSeatCents,
-            vehicle: vehicle,
-            status: status ?? self.status,
-            notes: notes ?? self.notes,
-            createdAt: createdAt,
-            updatedAt: FirestoreTimestamp(date: Date())
-        )
-    }
-}
-
-extension JoinRideRequest {
-    func updated(status: RideRequestStatus) -> JoinRideRequest {
-        let now = FirestoreTimestamp(date: Date())
-        return JoinRideRequest(
-            id: id,
-            rideId: rideId,
-            passengerUid: passengerUid,
-            passengerDisplayName: passengerDisplayName,
-            passengerProfilePhotoPath: passengerProfilePhotoPath,
-            seatsRequested: seatsRequested,
-            pickupNote: pickupNote,
-            dropoffNote: dropoffNote,
-            luggageNote: luggageNote,
-            message: message,
-            pricePerSeatCents: pricePerSeatCents,
-            status: status,
-            createdAt: createdAt,
-            updatedAt: now,
-            decidedAt: now
-        )
-    }
-}
-
-extension PassengerTrip {
-    func updated(status: TripStatus) -> PassengerTrip {
-        PassengerTrip(
-            id: id,
-            requestId: requestId,
-            rideId: rideId,
-            passengerUid: passengerUid,
-            driverUid: driverUid,
-            seats: seats,
-            status: status,
-            rideSnapshot: rideSnapshot,
-            createdAt: createdAt,
-            updatedAt: FirestoreTimestamp(date: Date())
-        )
-    }
-}
-
-extension RideConversation {
-    static func acceptedRideConversation(request: JoinRideRequest, ride: MarketplaceRide) -> RideConversation {
-        let now = FirestoreTimestamp(date: Date())
-        let participantUids = [ride.driverUid, request.passengerUid].uniqued()
-        return RideConversation(
-            id: "\(ride.id)_\(request.id)",
-            rideId: ride.id,
-            requestId: request.id,
-            participantUids: participantUids,
-            driverUid: ride.driverUid,
-            passengerUid: request.passengerUid,
-            driverDisplayName: ride.driverDisplayName,
-            passengerDisplayName: request.passengerDisplayName,
-            routeTitle: "\(ride.from.displayName) -> \(ride.to.displayName)",
-            lastMessagePreview: "Ride request accepted. You can chat here.",
-            lastMessageAt: now,
-            unreadCountsByUid: Self.unreadCounts(driverUid: ride.driverUid, passengerUid: request.passengerUid),
-            status: .active,
-            createdAt: now,
-            updatedAt: now
-        )
-    }
-
-    static func acceptedRideConversation(request: JoinRideRequest, trip: PassengerTrip) -> RideConversation {
-        let now = FirestoreTimestamp(date: Date())
-        let participantUids = [trip.driverUid, trip.passengerUid].uniqued()
-        return RideConversation(
-            id: "\(trip.rideId)_\(request.id)",
-            rideId: trip.rideId,
-            requestId: request.id,
-            participantUids: participantUids,
-            driverUid: trip.driverUid,
-            passengerUid: trip.passengerUid,
-            driverDisplayName: trip.rideSnapshot.driverDisplayName,
-            passengerDisplayName: request.passengerDisplayName,
-            routeTitle: "\(trip.rideSnapshot.from.displayName) -> \(trip.rideSnapshot.to.displayName)",
-            lastMessagePreview: "Ride request accepted. You can chat here.",
-            lastMessageAt: now,
-            unreadCountsByUid: Self.unreadCounts(driverUid: trip.driverUid, passengerUid: trip.passengerUid),
-            status: .active,
-            createdAt: now,
-            updatedAt: now
-        )
-    }
-
-    private static func unreadCounts(driverUid: String, passengerUid: String) -> [String: Int] {
-        guard driverUid != passengerUid else {
-            return [driverUid: 0]
-        }
-        return [
-            driverUid: 0,
-            passengerUid: 1
-        ]
-    }
-
-    func updated(
-        lastMessagePreview: String? = nil,
-        lastMessageAt: FirestoreTimestamp? = nil,
-        unreadCountsByUid: [String: Int]? = nil,
-        status: ConversationStatus? = nil
-    ) -> RideConversation {
-        RideConversation(
-            id: id,
-            rideId: rideId,
-            requestId: requestId,
-            participantUids: participantUids,
-            driverUid: driverUid,
-            passengerUid: passengerUid,
-            driverDisplayName: driverDisplayName,
-            passengerDisplayName: passengerDisplayName,
-            routeTitle: routeTitle,
-            lastMessagePreview: lastMessagePreview ?? self.lastMessagePreview,
-            lastMessageAt: lastMessageAt ?? self.lastMessageAt,
-            unreadCountsByUid: unreadCountsByUid ?? self.unreadCountsByUid,
-            status: status ?? self.status,
-            createdAt: createdAt,
-            updatedAt: FirestoreTimestamp(date: Date())
-        )
-    }
-
-    func otherParticipantName(for uid: String) -> String {
-        uid == driverUid ? passengerDisplayName : driverDisplayName
-    }
-}
-
 private extension RideStatus {
     var passengerTripStatus: TripStatus? {
         switch self {
@@ -1200,12 +997,5 @@ private extension RideStatus {
         case .draft, .published, .full:
             return nil
         }
-    }
-}
-
-private extension Array where Element: Hashable {
-    func uniqued() -> [Element] {
-        var seen = Set<Element>()
-        return filter { seen.insert($0).inserted }
     }
 }

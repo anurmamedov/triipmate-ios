@@ -141,7 +141,7 @@ This plan reflects the active Xcode target as of July 2026. The project now uses
 
 **Done when:** two local accounts can exchange messages and see updates without refreshing.
 
-## 14. Security and Automated Testing `[~]`
+## 14. Security and Automated Testing `[x]`
 
 - Restricted profile and vehicle reads/writes to their owners.
 - Restricted ride, request, trip, conversation, and message writes to the owning or involved users.
@@ -149,9 +149,10 @@ This plan reflects the active Xcode target as of July 2026. The project now uses
 - Added `./scripts/test-security-rules.sh` for disposable-user Firestore and Storage rule checks.
 - Updated profile emulator testing to use owner-scoped profile photo paths.
 - Replaced authenticated collection scans for rides, ride requests, trips, and conversations with server-side filtered Firestore queries.
-- Still need atomic seat-booking tests so two passengers cannot overbook the same ride at the same time.
-- Still need Swift unit test and UI test targets in Xcode.
-- Still need CI builds for pull requests, accessibility checks, offline behavior tests, and multiple iPhone size checks.
+- Added a testable ride acceptance policy with unit coverage for seat reduction, full rides, wrong-driver rejection, already-decided requests, and sequential overbooking prevention.
+- Added Swift unit test and UI test targets to the Xcode project and shared schemes.
+- Documented the build-for-testing command for CI and local release checks.
+- Added `Docs/ReleaseQA.md` for accessibility checks, offline behavior, multiple iPhone size checks, security checks, and final smoke testing.
 
 **Done when:** unauthorized operations fail and core local workflows pass automatically.
 
@@ -196,6 +197,8 @@ This plan reflects the active Xcode target as of July 2026. The project now uses
 - Add APNs/Firebase Cloud Messaging for accepted/declined requests, new messages, ride reminders, cancellations, and payout/payment updates.
 - Add badge counts for unread messages and pending driver requests.
 - Replace polling-only message refresh with a production-ready listener or push-triggered refresh.
+- Make message, request, trip, and badge updates asynchronous across the entire app so users do not need to refresh or move between screens to see new data.
+- Show a small red unread indicator on the Messages tab/icon when a new message arrives.
 - Add notification deep links to the relevant ride, request, trip, or chat.
 
 **Done when:** users receive timely updates without keeping the app open.
@@ -237,10 +240,20 @@ This plan reflects the active Xcode target as of July 2026. The project now uses
 - Still need launch screen polish, App Store screenshots, app description, privacy nutrition labels, and permission copy.
 - Test all main flows on small, standard, and large iPhone simulators.
 - Test fresh install, logout/login, emulator restart, poor network/offline, dark mode if supported, dynamic type, and VoiceOver basics.
+- Fix truncated labels and values on compact screens, including the ride request detail rows shown in the July 13 simulator screenshot.
 - Add a final manual release checklist for passenger and driver flows.
 
 **Done when:** a staging/TestFlight build can be handed to real testers with a clear checklist and known limitations.
 
+## 23. UI/UX Cleanup From Manual Testing `[ ]`
+
+- Review the join request / ride request detail screen and remove or redesign the unexpected cancel text/action at the bottom if it is not needed.
+- Make request detail cards responsive so labels such as request status, seats requested, request price, and request time appear fully.
+- Check icon, label, and value spacing on request detail screens so important information is readable on every supported iPhone size.
+- Re-test the request flow as both passenger and driver after these visual fixes.
+
+**Done when:** request screens look complete, readable, and intentional on simulator and real-device sizes.
+
 ## Recommended Next Work
 
-Continue stage **14** first. The highest-impact next change is replacing collection scans with filtered Firestore queries and adding automated Swift tests. After that, stage **15** should persist Profile tools to Firestore, and stage **19** should move seat booking and driver decisions into a transactional backend/API path.
+Continue stage **15** next so Profile tools persist to Firestore instead of device-only local storage. After that, stage **18** should add real-time updates and badges, and stage **19** should move seat booking and driver decisions into a transactional backend/API path.

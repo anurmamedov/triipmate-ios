@@ -206,3 +206,182 @@ struct RideMessage: Identifiable, Codable, Hashable {
     let readByUids: [String]
     let createdAt: FirestoreTimestamp
 }
+
+extension MarketplaceRide {
+    var snapshot: RideSnapshot {
+        RideSnapshot(
+            rideId: id,
+            driverUid: driverUid,
+            driverDisplayName: driverDisplayName,
+            from: from,
+            to: to,
+            departureAt: departureAt,
+            expectedArrivalAt: expectedArrivalAt,
+            pricePerSeatCents: pricePerSeatCents,
+            vehicle: vehicle
+        )
+    }
+
+    func updated(
+        status: RideStatus? = nil,
+        availableSeats: Int? = nil,
+        totalSeats: Int? = nil,
+        pricePerSeatCents: Int? = nil,
+        notes: String? = nil,
+        updatedAt: FirestoreTimestamp = FirestoreTimestamp(date: Date())
+    ) -> MarketplaceRide {
+        MarketplaceRide(
+            id: id,
+            driverUid: driverUid,
+            driverDisplayName: driverDisplayName,
+            driverProfilePhotoPath: driverProfilePhotoPath,
+            from: from,
+            to: to,
+            departureAt: departureAt,
+            expectedArrivalAt: expectedArrivalAt,
+            estimatedDurationMinutes: estimatedDurationMinutes,
+            availableSeats: availableSeats ?? self.availableSeats,
+            totalSeats: totalSeats ?? self.totalSeats,
+            pricePerSeatCents: pricePerSeatCents ?? self.pricePerSeatCents,
+            vehicle: vehicle,
+            status: status ?? self.status,
+            notes: notes ?? self.notes,
+            createdAt: createdAt,
+            updatedAt: updatedAt
+        )
+    }
+}
+
+extension JoinRideRequest {
+    func updated(
+        status: RideRequestStatus,
+        decidedAt: FirestoreTimestamp = FirestoreTimestamp(date: Date())
+    ) -> JoinRideRequest {
+        JoinRideRequest(
+            id: id,
+            rideId: rideId,
+            passengerUid: passengerUid,
+            passengerDisplayName: passengerDisplayName,
+            passengerProfilePhotoPath: passengerProfilePhotoPath,
+            seatsRequested: seatsRequested,
+            pickupNote: pickupNote,
+            dropoffNote: dropoffNote,
+            luggageNote: luggageNote,
+            message: message,
+            pricePerSeatCents: pricePerSeatCents,
+            status: status,
+            createdAt: createdAt,
+            updatedAt: decidedAt,
+            decidedAt: decidedAt
+        )
+    }
+}
+
+extension PassengerTrip {
+    func updated(status: TripStatus) -> PassengerTrip {
+        PassengerTrip(
+            id: id,
+            requestId: requestId,
+            rideId: rideId,
+            passengerUid: passengerUid,
+            driverUid: driverUid,
+            seats: seats,
+            status: status,
+            rideSnapshot: rideSnapshot,
+            createdAt: createdAt,
+            updatedAt: FirestoreTimestamp(date: Date())
+        )
+    }
+}
+
+extension RideConversation {
+    static func acceptedRideConversation(request: JoinRideRequest, ride: MarketplaceRide) -> RideConversation {
+        let now = FirestoreTimestamp(date: Date())
+        let participantUids = [ride.driverUid, request.passengerUid].uniqued()
+        return RideConversation(
+            id: "\(ride.id)_\(request.id)",
+            rideId: ride.id,
+            requestId: request.id,
+            participantUids: participantUids,
+            driverUid: ride.driverUid,
+            passengerUid: request.passengerUid,
+            driverDisplayName: ride.driverDisplayName,
+            passengerDisplayName: request.passengerDisplayName,
+            routeTitle: "\(ride.from.displayName) -> \(ride.to.displayName)",
+            lastMessagePreview: "Ride request accepted. You can chat here.",
+            lastMessageAt: now,
+            unreadCountsByUid: Self.unreadCounts(driverUid: ride.driverUid, passengerUid: request.passengerUid),
+            status: .active,
+            createdAt: now,
+            updatedAt: now
+        )
+    }
+
+    static func acceptedRideConversation(request: JoinRideRequest, trip: PassengerTrip) -> RideConversation {
+        let now = FirestoreTimestamp(date: Date())
+        let participantUids = [trip.driverUid, trip.passengerUid].uniqued()
+        return RideConversation(
+            id: "\(trip.rideId)_\(request.id)",
+            rideId: trip.rideId,
+            requestId: request.id,
+            participantUids: participantUids,
+            driverUid: trip.driverUid,
+            passengerUid: trip.passengerUid,
+            driverDisplayName: trip.rideSnapshot.driverDisplayName,
+            passengerDisplayName: request.passengerDisplayName,
+            routeTitle: "\(trip.rideSnapshot.from.displayName) -> \(trip.rideSnapshot.to.displayName)",
+            lastMessagePreview: "Ride request accepted. You can chat here.",
+            lastMessageAt: now,
+            unreadCountsByUid: Self.unreadCounts(driverUid: trip.driverUid, passengerUid: trip.passengerUid),
+            status: .active,
+            createdAt: now,
+            updatedAt: now
+        )
+    }
+
+    private static func unreadCounts(driverUid: String, passengerUid: String) -> [String: Int] {
+        guard driverUid != passengerUid else {
+            return [driverUid: 0]
+        }
+        return [
+            driverUid: 0,
+            passengerUid: 1
+        ]
+    }
+
+    func updated(
+        lastMessagePreview: String? = nil,
+        lastMessageAt: FirestoreTimestamp? = nil,
+        unreadCountsByUid: [String: Int]? = nil,
+        status: ConversationStatus? = nil
+    ) -> RideConversation {
+        RideConversation(
+            id: id,
+            rideId: rideId,
+            requestId: requestId,
+            participantUids: participantUids,
+            driverUid: driverUid,
+            passengerUid: passengerUid,
+            driverDisplayName: driverDisplayName,
+            passengerDisplayName: passengerDisplayName,
+            routeTitle: routeTitle,
+            lastMessagePreview: lastMessagePreview ?? self.lastMessagePreview,
+            lastMessageAt: lastMessageAt ?? self.lastMessageAt,
+            unreadCountsByUid: unreadCountsByUid ?? self.unreadCountsByUid,
+            status: status ?? self.status,
+            createdAt: createdAt,
+            updatedAt: FirestoreTimestamp(date: Date())
+        )
+    }
+
+    func otherParticipantName(for uid: String) -> String {
+        uid == driverUid ? passengerDisplayName : driverDisplayName
+    }
+}
+
+private extension Array where Element: Hashable {
+    func uniqued() -> [Element] {
+        var seen = Set<Element>()
+        return filter { seen.insert($0).inserted }
+    }
+}

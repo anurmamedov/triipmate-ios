@@ -25,7 +25,27 @@
 		8A0000010000000000000025 /* MarketplaceModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A0000010000000000000026 /* MarketplaceModels.swift */; };
 		8A0000010000000000000027 /* AuthSessionStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A0000010000000000000028 /* AuthSessionStore.swift */; };
 		8A0000010000000000000029 /* AppEnvironment.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A000001000000000000002A /* AppEnvironment.swift */; };
+		8B0000010000000000000001 /* RideAcceptancePolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8B0000010000000000000011 /* RideAcceptancePolicy.swift */; };
+		8B0000010000000000000002 /* RideAcceptancePolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8B0000010000000000000012 /* RideAcceptancePolicyTests.swift */; };
+		8B0000010000000000000003 /* TriipMateLaunchTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8B0000010000000000000013 /* TriipMateLaunchTests.swift */; };
 /* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		8B0000010000000000000024 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 8A0000010000000000000070 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 8A0000010000000000000040;
+			remoteInfo = TriipMate;
+		};
+		8B0000010000000000000025 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 8A0000010000000000000070 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 8A0000010000000000000040;
+			remoteInfo = TriipMate;
+		};
+/* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
 		8A0000010000000000000010 /* TriipMate.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = TriipMate.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -49,10 +69,29 @@
 		8A0000010000000000000026 /* MarketplaceModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarketplaceModels.swift; sourceTree = "<group>"; };
 		8A0000010000000000000028 /* AuthSessionStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthSessionStore.swift; sourceTree = "<group>"; };
 		8A000001000000000000002A /* AppEnvironment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppEnvironment.swift; sourceTree = "<group>"; };
+		8B0000010000000000000010 /* TriipMateTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = TriipMateTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		8B0000010000000000000011 /* RideAcceptancePolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RideAcceptancePolicy.swift; sourceTree = "<group>"; };
+		8B0000010000000000000012 /* RideAcceptancePolicyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RideAcceptancePolicyTests.swift; sourceTree = "<group>"; };
+		8B0000010000000000000013 /* TriipMateLaunchTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TriipMateLaunchTests.swift; sourceTree = "<group>"; };
+		8B0000010000000000000014 /* TriipMateUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = TriipMateUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
 		8A0000010000000000000020 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		8B0000010000000000000020 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		8B0000010000000000000021 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -66,6 +105,8 @@
 			isa = PBXGroup;
 			children = (
 				8A0000010000000000000031 /* TriipMate */,
+				8B0000010000000000000030 /* TriipMateTests */,
+				8B0000010000000000000031 /* TriipMateUITests */,
 				8A0000010000000000000032 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -128,6 +169,7 @@
 			children = (
 				8A0000010000000000000021 /* AuthModels.swift */,
 				8A0000010000000000000026 /* MarketplaceModels.swift */,
+				8B0000010000000000000011 /* RideAcceptancePolicy.swift */,
 				8A0000010000000000000012 /* RideModels.swift */,
 			);
 			path = Models;
@@ -205,8 +247,26 @@
 			isa = PBXGroup;
 			children = (
 				8A0000010000000000000010 /* TriipMate.app */,
+				8B0000010000000000000010 /* TriipMateTests.xctest */,
+				8B0000010000000000000014 /* TriipMateUITests.xctest */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		8B0000010000000000000030 /* TriipMateTests */ = {
+			isa = PBXGroup;
+			children = (
+				8B0000010000000000000012 /* RideAcceptancePolicyTests.swift */,
+			);
+			path = TriipMateTests;
+			sourceTree = "<group>";
+		};
+		8B0000010000000000000031 /* TriipMateUITests */ = {
+			isa = PBXGroup;
+			children = (
+				8B0000010000000000000013 /* TriipMateLaunchTests.swift */,
+			);
+			path = TriipMateUITests;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -229,6 +289,42 @@
 			productReference = 8A0000010000000000000010 /* TriipMate.app */;
 			productType = "com.apple.product-type.application";
 		};
+		8B0000010000000000000040 /* TriipMateTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 8B0000010000000000000080 /* Build configuration list for PBXNativeTarget "TriipMateTests" */;
+			buildPhases = (
+				8B0000010000000000000050 /* Sources */,
+				8B0000010000000000000020 /* Frameworks */,
+				8B0000010000000000000060 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				8B0000010000000000000026 /* PBXTargetDependency */,
+			);
+			name = TriipMateTests;
+			productName = TriipMateTests;
+			productReference = 8B0000010000000000000010 /* TriipMateTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		8B0000010000000000000041 /* TriipMateUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 8B0000010000000000000081 /* Build configuration list for PBXNativeTarget "TriipMateUITests" */;
+			buildPhases = (
+				8B0000010000000000000051 /* Sources */,
+				8B0000010000000000000021 /* Frameworks */,
+				8B0000010000000000000061 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				8B0000010000000000000027 /* PBXTargetDependency */,
+			);
+			name = TriipMateUITests;
+			productName = TriipMateUITests;
+			productReference = 8B0000010000000000000014 /* TriipMateUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -241,6 +337,14 @@
 				TargetAttributes = {
 					8A0000010000000000000040 = {
 						CreatedOnToolsVersion = 15.0;
+					};
+					8B0000010000000000000040 = {
+						CreatedOnToolsVersion = 15.0;
+						TestTargetID = 8A0000010000000000000040;
+					};
+					8B0000010000000000000041 = {
+						CreatedOnToolsVersion = 15.0;
+						TestTargetID = 8A0000010000000000000040;
 					};
 				};
 			};
@@ -258,6 +362,8 @@
 			projectRoot = "";
 			targets = (
 				8A0000010000000000000040 /* TriipMate */,
+				8B0000010000000000000040 /* TriipMateTests */,
+				8B0000010000000000000041 /* TriipMateUITests */,
 			);
 		};
 /* End PBXProject section */
@@ -268,6 +374,20 @@
 			buildActionMask = 2147483647;
 			files = (
 				8A000001000000000000000B /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		8B0000010000000000000060 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		8B0000010000000000000061 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -291,6 +411,7 @@
 				8A000001000000000000000D /* AuthViews.swift in Sources */,
 				8A000001000000000000000E /* AuthModels.swift in Sources */,
 				8A0000010000000000000025 /* MarketplaceModels.swift in Sources */,
+				8B0000010000000000000001 /* RideAcceptancePolicy.swift in Sources */,
 				8A000001000000000000000F /* AppSession.swift in Sources */,
 				8A0000010000000000000029 /* AppEnvironment.swift in Sources */,
 				8A0000010000000000000023 /* LocalFirebaseServices.swift in Sources */,
@@ -298,7 +419,36 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		8B0000010000000000000050 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				8B0000010000000000000002 /* RideAcceptancePolicyTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		8B0000010000000000000051 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				8B0000010000000000000003 /* TriipMateLaunchTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		8B0000010000000000000026 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 8A0000010000000000000040 /* TriipMate */;
+			targetProxy = 8B0000010000000000000024 /* PBXContainerItemProxy */;
+		};
+		8B0000010000000000000027 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 8A0000010000000000000040 /* TriipMate */;
+			targetProxy = 8B0000010000000000000025 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		8A0000010000000000000072 /* Debug */ = {
@@ -467,6 +617,68 @@
 			};
 			name = Release;
 		};
+		8B0000010000000000000082 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.triipmate.app.tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/TriipMate.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/TriipMate";
+			};
+			name = Debug;
+		};
+		8B0000010000000000000083 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.triipmate.app.tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/TriipMate.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/TriipMate";
+			};
+			name = Release;
+		};
+		8B0000010000000000000084 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.triipmate.app.uitests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = TriipMate;
+			};
+			name = Debug;
+		};
+		8B0000010000000000000085 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.triipmate.app.uitests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = TriipMate;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -484,6 +696,24 @@
 			buildConfigurations = (
 				8A0000010000000000000081 /* Debug */,
 				8A0000010000000000000082 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		8B0000010000000000000080 /* Build configuration list for PBXNativeTarget "TriipMateTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				8B0000010000000000000082 /* Debug */,
+				8B0000010000000000000083 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		8B0000010000000000000081 /* Build configuration list for PBXNativeTarget "TriipMateUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				8B0000010000000000000084 /* Debug */,
+				8B0000010000000000000085 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
