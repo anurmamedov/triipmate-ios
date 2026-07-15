@@ -10,6 +10,9 @@ enum FirestoreCollection {
     static let trips = "trips"
     static let conversations = "conversations"
     static let messages = "messages"
+    static let verificationRequests = "verificationRequests"
+    static let safetyReports = "safetyReports"
+    static let rideReviews = "rideReviews"
 
     static func userPath(uid: String) -> String {
         "\(users)/\(uid)"
@@ -110,6 +113,22 @@ enum MessageStatus: String, Codable, CaseIterable, Identifiable {
     var id: Self { self }
 }
 
+enum VerificationRequestStatus: String, Codable, CaseIterable, Identifiable {
+    case pending
+    case approved
+    case rejected
+
+    var id: Self { self }
+}
+
+enum SafetyReportStatus: String, Codable, CaseIterable, Identifiable {
+    case open
+    case reviewing
+    case resolved
+
+    var id: Self { self }
+}
+
 struct RouteEndpoint: Codable, Hashable {
     let city: String
     let state: String
@@ -154,8 +173,55 @@ struct MarketplaceRide: Identifiable, Codable, Hashable {
     let vehicle: VehicleSnapshot
     let status: RideStatus
     let notes: String
+    let driverRatingAverage: Double?
+    let driverRatingCount: Int?
+    let driverIsVerified: Bool?
     let createdAt: FirestoreTimestamp
     let updatedAt: FirestoreTimestamp
+
+    init(
+        id: String,
+        driverUid: String,
+        driverDisplayName: String,
+        driverProfilePhotoPath: String?,
+        from: RouteEndpoint,
+        to: RouteEndpoint,
+        departureAt: FirestoreTimestamp,
+        expectedArrivalAt: FirestoreTimestamp?,
+        estimatedDurationMinutes: Int,
+        availableSeats: Int,
+        totalSeats: Int,
+        pricePerSeatCents: Int,
+        vehicle: VehicleSnapshot,
+        status: RideStatus,
+        notes: String,
+        driverRatingAverage: Double? = nil,
+        driverRatingCount: Int? = nil,
+        driverIsVerified: Bool? = nil,
+        createdAt: FirestoreTimestamp,
+        updatedAt: FirestoreTimestamp
+    ) {
+        self.id = id
+        self.driverUid = driverUid
+        self.driverDisplayName = driverDisplayName
+        self.driverProfilePhotoPath = driverProfilePhotoPath
+        self.from = from
+        self.to = to
+        self.departureAt = departureAt
+        self.expectedArrivalAt = expectedArrivalAt
+        self.estimatedDurationMinutes = estimatedDurationMinutes
+        self.availableSeats = availableSeats
+        self.totalSeats = totalSeats
+        self.pricePerSeatCents = pricePerSeatCents
+        self.vehicle = vehicle
+        self.status = status
+        self.notes = notes
+        self.driverRatingAverage = driverRatingAverage
+        self.driverRatingCount = driverRatingCount
+        self.driverIsVerified = driverIsVerified
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
+    }
 }
 
 struct JoinRideRequest: Identifiable, Codable, Hashable {
@@ -301,6 +367,40 @@ struct SupportRequestTicket: Identifiable, Codable, Hashable {
     let createdAt: FirestoreTimestamp
 }
 
+struct TrustVerificationRequest: Identifiable, Hashable {
+    let id: String
+    let userUid: String
+    let role: AppRole
+    let documentType: String
+    let documentLastFour: String
+    let issuingRegion: String
+    let status: VerificationRequestStatus
+    let createdAt: FirestoreTimestamp
+    let updatedAt: FirestoreTimestamp
+}
+
+struct RideSafetyReport: Identifiable, Codable, Hashable {
+    let id: String
+    let rideId: String
+    let reporterUid: String
+    let reportedUid: String
+    let category: String
+    let details: String
+    let status: SafetyReportStatus
+    let createdAt: FirestoreTimestamp
+}
+
+struct RideReview: Identifiable, Codable, Hashable {
+    let id: String
+    let tripId: String
+    let rideId: String
+    let reviewerUid: String
+    let revieweeUid: String
+    let rating: Int
+    let comment: String
+    let createdAt: FirestoreTimestamp
+}
+
 extension MarketplaceRide {
     var snapshot: RideSnapshot {
         RideSnapshot(
@@ -322,6 +422,9 @@ extension MarketplaceRide {
         totalSeats: Int? = nil,
         pricePerSeatCents: Int? = nil,
         notes: String? = nil,
+        driverRatingAverage: Double? = nil,
+        driverRatingCount: Int? = nil,
+        driverIsVerified: Bool? = nil,
         updatedAt: FirestoreTimestamp = FirestoreTimestamp(date: Date())
     ) -> MarketplaceRide {
         MarketplaceRide(
@@ -340,6 +443,9 @@ extension MarketplaceRide {
             vehicle: vehicle,
             status: status ?? self.status,
             notes: notes ?? self.notes,
+            driverRatingAverage: driverRatingAverage ?? self.driverRatingAverage,
+            driverRatingCount: driverRatingCount ?? self.driverRatingCount,
+            driverIsVerified: driverIsVerified ?? self.driverIsVerified,
             createdAt: createdAt,
             updatedAt: updatedAt
         )

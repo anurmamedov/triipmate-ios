@@ -50,6 +50,7 @@ final class AppSession: ObservableObject {
     private let passengerTripService = LocalFirestorePassengerTripService()
     private let messagingService = LocalFirestoreMessagingService()
     private let accountToolService = LocalFirestoreAccountToolService()
+    private let trustSafetyService = LocalFirestoreTrustSafetyService()
 
     init() {
         Task { await restoreSession() }
@@ -387,8 +388,13 @@ final class AppSession: ObservableObject {
                 sortSavedVehicles()
             }
 
-            try await rideService.save(ride, idToken: authUser.idToken)
-            driverRides.append(ride)
+            let rideToSave = ride.updated(
+                driverRatingAverage: userProfile?.ratingAverage,
+                driverRatingCount: userProfile?.ratingCount,
+                driverIsVerified: userProfile?.isDriverVerified
+            )
+            try await rideService.save(rideToSave, idToken: authUser.idToken)
+            driverRides.append(rideToSave)
             driverRides.sort { $0.departureAt.date < $1.departureAt.date }
             return true
         } catch {
@@ -866,6 +872,146 @@ final class AppSession: ObservableObject {
             )
             try await accountToolService.submitSupportRequest(ticket, uid: authUser.uid, idToken: authUser.idToken)
             accountToolsNotice = "Support request sent."
+            return true
+        } catch {
+            authError = error.localizedDescription
+            return false
+        }
+    }
+
+    func submitVerificationRequest(role: AppRole, identity: IdentityToolSettings) async -> Bool {
+        guard let authUser else {
+            authError = "Please log in before requesting verification."
+            return false
+        }
+
+        guard !identity.documentLastFour.isEmpty else {
+            authError = "Save document details before requesting verification."
+            return false
+        }
+
+        if role == .driver && identity.issuingRegion.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            authError = "Add the driver license state or province before requesting driver verification."
+            return false
+        }
+
+        isAccountToolsWorking = true
+        authError = nil
+        accountToolsNotice = nil
+        defer { isAccountToolsWorking = false }
+
+        do {
+            let now = FirestoreTimestamp(date: Date())
+            let request = TrustVerificationRequest(
+                id: "\(authUser.uid)_\(role.rawValue)_\(Int(now.date.timeIntervalSince1970))",
+                userUid: authUser.uid,
+                role: role,
+                documentType: identity.documentType,
+                documentLastFour: identity.documentLastFour,
+                issuingRegion: identity.issuingRegion,
+                status: .pending,
+                createdAt: now,
+                updatedAt: now
+            )
+            try await trustSafetyService.submitVerificationRequest(request, idToken: authUser.idToken)
+            accountToolsNotice = "Verification request sent for review."
+            return true
+        } catch {
+            authError = error.localizedDescription
+            return false
+        }
+    }
+
+    func submitSafetyReport(ride: Ride, category: String, details: String) async -> Bool {
+        guard let authUser else {
+            authError = "Please log in before reporting a safety concern."
+            return false
+        }
+
+        let cleanDetails = details.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanDetails.isEmpty else {
+            authError = "Describe the safety concern before sending."
+            return false
+        }
+
+        isAccountToolsWorking = true
+        authError = nil
+        accountToolsNotice = nil
+        defer { isAccountToolsWorking = false }
+
+        do {
+            let report = RideSafetyReport(
+                id: UUID().uuidString.lowercased(),
+                rideId: ride.id,
+                reporterUid: authUser.uid,
+                reportedUid: ride.driverUid,
+                category: category,
+                details: cleanDetails,
+                status: .open,
+                createdAt: FirestoreTimestamp(date: Date())
+            )
+            try await trustSafetyService.submitSafetyReport(report, idToken: authUser.idToken)
+            accountToolsNotice = "Safety report sent for review."
+            return true
+        } catch {
+            authError = error.localizedDescription
+            return false
+        }
+    }
+
+    func submitRideReview(trip: PassengerTrip, rating: Int, comment: String) async -> Bool {
+        guard let authUser else {
+            authError = "Please log in before rating a trip."
+            return false
+        }
+
+        guard trip.passengerUid == authUser.uid || trip.driverUid == authUser.uid else {
+            authError = "You can only rate trips you joined."
+            return false
+        }
+
+        guard trip.status == .completed else {
+            authError = "Ratings open after the trip is completed."
+            return false
+        }
+
+        let safeRating = min(max(rating, 1), 5)
+        let revieweeUid = authUser.uid == trip.passengerUid ? trip.driverUid : trip.passengerUid
+        let reviewID = "\(trip.id)_\(authUser.uid)_\(revieweeUid)"
+
+        isAccountToolsWorking = true
+        authError = nil
+        accountToolsNotice = nil
+        defer { isAccountToolsWorking = false }
+
+        do {
+            let review = RideReview(
+                id: reviewID,
+                tripId: trip.id,
+                rideId: trip.rideId,
+                reviewerUid: authUser.uid,
+                revieweeUid: revieweeUid,
+                rating: safeRating,
+                comment: comment.trimmingCharacters(in: .whitespacesAndNewlines),
+                createdAt: FirestoreTimestamp(date: Date())
+            )
+            try await trustSafetyService.saveReview(review, idToken: authUser.idToken)
+
+            let reviewedProfile = try await profileService.fetch(uid: revieweeUid, idToken: authUser.idToken)
+            let currentTotal = (reviewedProfile.ratingAverage ?? 0) * Double(reviewedProfile.ratingCount)
+            let updatedCount = reviewedProfile.ratingCount + 1
+            let updatedAverage = (currentTotal + Double(safeRating)) / Double(updatedCount)
+            let updatedProfile = reviewedProfile.updated(
+                ratingAverage: updatedAverage,
+                ratingCount: updatedCount,
+                completedTripCount: max(reviewedProfile.completedTripCount, 1)
+            )
+            try await profileService.save(updatedProfile, idToken: authUser.idToken)
+
+            if updatedProfile.uid == userProfile?.uid {
+                userProfile = updatedProfile
+            }
+            accountToolsNotice = "Thanks. Your rating was added."
             return true
         } catch {
             authError = error.localizedDescription

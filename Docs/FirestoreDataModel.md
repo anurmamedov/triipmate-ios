@@ -10,11 +10,14 @@ This document defines the local Firestore schema for the marketplace features. T
 | `users/{uid}/vehicles/{vehicleId}` | Vehicles owned by one driver. |
 | `users/{uid}/accountTools/settings` | Account tool preferences for Profile settings. |
 | `users/{uid}/supportRequests/{supportRequestId}` | Support requests created by the user. |
+| `users/{uid}/verificationRequests/{verificationRequestId}` | Identity or driver verification review requests. |
 | `rides/{rideId}` | Published or draft rides created by drivers. |
 | `rideRequests/{requestId}` | Passenger requests to join a ride. |
 | `trips/{tripId}` | Passenger trip records created from accepted requests. |
 | `conversations/{conversationId}` | Driver/passenger chat metadata. |
 | `conversations/{conversationId}/messages/{messageId}` | Messages inside one conversation. |
+| `safetyReports/{reportId}` | Safety reports submitted from ride details. |
+| `rideReviews/{reviewId}` | Completed-trip reviews and ratings. |
 
 ## Users
 
@@ -36,7 +39,7 @@ Required fields:
 - `isDriverVerified`
 - `updatedAt`
 
-Rating and trip/savings counters default to an unrated zero state. Later rating and completed-trip workflows are responsible for updating these persisted aggregate fields.
+Rating and trip/savings counters default to an unrated zero state. Completed-trip reviews update the reviewed user's public aggregate fields.
 
 Document ID:
 
@@ -107,6 +110,32 @@ Rules:
 - Only the owner can create and read local support requests.
 - Production support should later add admin/provider review workflows before support tickets are useful outside local testing.
 
+## Verification Requests
+
+Swift model:
+
+- `TrustVerificationRequest`
+
+Path:
+
+- `users/{uid}/verificationRequests/{verificationRequestId}`
+
+Required fields:
+
+- `userUid`
+- `role`
+- `documentType`
+- `documentLastFour`
+- `issuingRegion`
+- `status`
+- `createdAt`
+- `updatedAt`
+
+Rules:
+
+- Only the owner can create and read local/staging verification requests.
+- Requests stay `pending` until a future admin/provider process approves or rejects them.
+
 ## Rides
 
 Swift model:
@@ -133,6 +162,9 @@ Required fields:
 - `vehicle`
 - `status`
 - `notes`
+- `driverRatingAverage`
+- `driverRatingCount`
+- `driverIsVerified`
 - `createdAt`
 - `updatedAt`
 
@@ -229,6 +261,59 @@ Allowed statuses:
 Rules:
 
 - A trip keeps a `rideSnapshot` so past trip history does not change when the original ride is edited later.
+
+## Safety Reports
+
+Swift model:
+
+- `RideSafetyReport`
+
+Path:
+
+- `safetyReports/{reportId}`
+
+Required fields:
+
+- `rideId`
+- `reporterUid`
+- `reportedUid`
+- `category`
+- `details`
+- `status`
+- `createdAt`
+
+Rules:
+
+- Signed-in users can create reports only as themselves.
+- Reporter and reported user can read a report.
+- Client updates/deletes are blocked until a moderation/admin surface exists.
+
+## Ride Reviews
+
+Swift model:
+
+- `RideReview`
+
+Path:
+
+- `rideReviews/{reviewId}`
+
+Required fields:
+
+- `tripId`
+- `rideId`
+- `reviewerUid`
+- `revieweeUid`
+- `rating`
+- `comment`
+- `createdAt`
+
+Rules:
+
+- Signed-in users can create reviews only as themselves.
+- Reviewer and reviewee can read the review.
+- Client updates/deletes are blocked so reviews are append-only.
+- Public user profile updates are restricted to rating aggregate fields only.
 
 ## Conversations
 

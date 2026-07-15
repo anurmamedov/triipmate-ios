@@ -438,9 +438,10 @@ private extension MarketplaceRide {
             carYear: vehicle.year,
             powerType: vehicle.powerType,
             bodyType: vehicle.bodyType,
-            rating: 5.0,
-            verified: false,
-            notes: notes
+            rating: driverRatingAverage ?? 0,
+            verified: driverIsVerified ?? false,
+            notes: notes,
+            driverUid: driverUid
         )
     }
 

@@ -4,6 +4,7 @@ struct RideDetailView: View {
     @EnvironmentObject private var session: AppSession
     let ride: Ride
     @State private var isRequestSheetPresented = false
+    @State private var isSafetyReportPresented = false
     @State private var isResultAlertPresented = false
     @State private var requestResultMessage = ""
 
@@ -66,6 +67,17 @@ struct RideDetailView: View {
                 .disabled(ride.seats <= 0 || session.isRideRequestWorking)
 
                 Button {
+                    isSafetyReportPresented = true
+                } label: {
+                    Label("Report safety concern", systemImage: "shield.lefthalf.filled")
+                        .font(.headline)
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                }
+                .buttonStyle(.bordered)
+                .tint(Color.tmAmber)
+
+                Button {
                 } label: {
                     Label("Message \(ride.driver)", systemImage: "paperplane.fill")
                         .font(.headline)
@@ -82,6 +94,13 @@ struct RideDetailView: View {
         .navigationBarTitleDisplayMode(.inline)
         .sheet(isPresented: $isRequestSheetPresented) {
             RideRequestFormView(ride: ride) { message in
+                requestResultMessage = message
+                isResultAlertPresented = true
+            }
+            .environmentObject(session)
+        }
+        .sheet(isPresented: $isSafetyReportPresented) {
+            SafetyReportSheet(ride: ride) { message in
                 requestResultMessage = message
                 isResultAlertPresented = true
             }
@@ -148,6 +167,90 @@ struct RideDetailView: View {
         .padding(16)
         .background(.white)
         .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+}
+
+private struct SafetyReportSheet: View {
+    @EnvironmentObject private var session: AppSession
+    @Environment(\.dismiss) private var dismiss
+    let ride: Ride
+    let onComplete: (String) -> Void
+    @State private var category = "Unsafe behavior"
+    @State private var details = ""
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Label("Safety report", systemImage: "shield.lefthalf.filled")
+                            .font(.title3.bold())
+                            .foregroundStyle(Color.tmInk)
+                        Text("\(ride.from) → \(ride.to)")
+                            .font(.subheadline)
+                            .foregroundStyle(Color.tmSlate)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(16)
+                    .background(.white)
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+
+                    VStack(alignment: .leading, spacing: 14) {
+                        Picker("Reason", selection: $category) {
+                            Text("Unsafe behavior").tag("Unsafe behavior")
+                            Text("Suspicious profile").tag("Suspicious profile")
+                            Text("Wrong ride details").tag("Wrong ride details")
+                            Text("Payment concern").tag("Payment concern")
+                        }
+                        .pickerStyle(.menu)
+
+                        TextField("Describe what happened", text: $details, axis: .vertical)
+                            .lineLimit(5...8)
+                            .padding(12)
+                            .background(Color.tmMist)
+                            .clipShape(RoundedRectangle(cornerRadius: 8))
+
+                        Text("Reports are saved for review. For immediate danger, contact local emergency services first.")
+                            .font(.caption)
+                            .foregroundStyle(Color.tmSlate)
+                    }
+                    .padding(16)
+                    .background(.white)
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+
+                    if let error = session.authError {
+                        Label(error, systemImage: "exclamationmark.triangle.fill")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(Color.tmAmber)
+                            .padding(12)
+                            .background(Color.tmAmber.opacity(0.12))
+                            .clipShape(RoundedRectangle(cornerRadius: 8))
+                    }
+                }
+                .padding(20)
+            }
+            .background(Color.tmMist.ignoresSafeArea())
+            .navigationTitle("Report")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button(session.isAccountToolsWorking ? "Sending" : "Send") {
+                        Task {
+                            let didSend = await session.submitSafetyReport(ride: ride, category: category, details: details)
+                            if didSend {
+                                dismiss()
+                                onComplete("Safety report sent for review.")
+                            }
+                        }
+                    }
+                    .disabled(session.isAccountToolsWorking || details.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+            }
+            .tint(Color.tmGreen)
+        }
     }
 }
 

@@ -168,15 +168,21 @@ This plan reflects the active Xcode target as of July 2026. The project now uses
 
 **Done when:** every Profile tool opens, saves the correct data for the logged-in user, reloads after logout/login, and clearly avoids fake production payment or verification promises.
 
-## 16. Trust, Safety, Verification, and Ratings `[ ]`
+## 16. Trust, Safety, Verification, and Ratings `[~]`
 
-- Build a real identity and driver verification workflow.
-- Choose a KYC/license provider or define an admin-review process for local/staging.
-- Add ratings and reviews after completed trips.
-- Update persisted `ratingAverage`, `ratingCount`, `completedTripCount`, and verification fields from real workflows.
-- Add report, block, and unsafe-ride flows for passengers and drivers.
+- Added local/staging verification request records from Identity and license.
+- Kept identity/driver verification badges pending until an admin/provider approval exists.
+- Added completed-trip rating UI in Ride history.
+- Persisted ride reviews and updated the reviewed user's `ratingAverage`, `ratingCount`, and `completedTripCount` aggregate fields.
+- Added safety report flow on Ride details.
+- Added Firestore rules for verification requests, safety reports, ride reviews, and restricted public rating aggregate updates.
+- Added driver rating/verification summary fields to ride data so search/detail badges are not hardcoded.
+
+Remaining:
+
+- Add admin/moderation review tools for approving verification requests and resolving reports.
+- Add block user / blocked conversation behavior.
 - Add cancellation rules, late-cancellation states, and visible policy text.
-- Add moderation/admin review requirements before production.
 
 **Done when:** trust badges, ratings, verification, and safety actions are based on real state instead of manually seeded profile fields.
 

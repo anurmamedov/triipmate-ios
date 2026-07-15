@@ -22,6 +22,55 @@ struct Ride: Identifiable, Hashable {
     let rating: Double
     let verified: Bool
     let notes: String
+    let driverUid: String
+
+    init(
+        id: String,
+        driver: String,
+        initials: String,
+        from: String,
+        to: String,
+        date: String,
+        time: String,
+        endTime: String,
+        tripTime: String,
+        seats: Int,
+        totalSeats: Int,
+        price: Int,
+        vehicle: String,
+        carMake: String,
+        carModel: String,
+        carYear: String,
+        powerType: String,
+        bodyType: String,
+        rating: Double,
+        verified: Bool,
+        notes: String,
+        driverUid: String = ""
+    ) {
+        self.id = id
+        self.driver = driver
+        self.initials = initials
+        self.from = from
+        self.to = to
+        self.date = date
+        self.time = time
+        self.endTime = endTime
+        self.tripTime = tripTime
+        self.seats = seats
+        self.totalSeats = totalSeats
+        self.price = price
+        self.vehicle = vehicle
+        self.carMake = carMake
+        self.carModel = carModel
+        self.carYear = carYear
+        self.powerType = powerType
+        self.bodyType = bodyType
+        self.rating = rating
+        self.verified = verified
+        self.notes = notes
+        self.driverUid = driverUid
+    }
 }
 
 extension Ride {

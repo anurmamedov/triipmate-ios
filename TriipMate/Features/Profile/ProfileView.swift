@@ -1143,6 +1143,25 @@ private struct IdentityAndLicenseView: View {
                         )
                         Task { await session.saveIdentitySettings(identity) }
                     }
+
+                    Button {
+                        let identity = IdentityToolSettings(
+                            documentType: documentType,
+                            documentLastFour: String(documentNumber.filter(\.isNumber).suffix(4)),
+                            issuingRegion: licenseState.trimmingCharacters(in: .whitespacesAndNewlines)
+                        )
+                        Task { await session.submitVerificationRequest(role: session.activeRole, identity: identity) }
+                    } label: {
+                        Label("Request verification review", systemImage: "checkmark.shield.fill")
+                            .font(.headline)
+                            .foregroundStyle(Color.tmGreen)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 50)
+                            .background(Color.tmGreen.opacity(0.12))
+                            .clipShape(RoundedRectangle(cornerRadius: 8))
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(session.isAccountToolsWorking || documentNumber.filter(\.isNumber).isEmpty)
                 }
 
                 ProfileToolNotice(
@@ -1987,7 +2006,9 @@ private struct PassengerToolListView: View {
 }
 
 private struct PassengerToolTripCard: View {
+    @EnvironmentObject private var session: AppSession
     let item: PassengerToolTrip
+    @State private var isRatingPresented = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -2022,6 +2043,25 @@ private struct PassengerToolTripCard: View {
             }
             .font(.caption.weight(.semibold))
             .foregroundStyle(Color.tmSlate)
+
+            if item.canRate, let trip = item.trip {
+                Button {
+                    isRatingPresented = true
+                } label: {
+                    Label("Rate trip", systemImage: "star.fill")
+                        .font(.subheadline.weight(.bold))
+                        .foregroundStyle(Color.tmGreen)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 42)
+                        .background(Color.tmGreen.opacity(0.12))
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                }
+                .buttonStyle(.plain)
+                .sheet(isPresented: $isRatingPresented) {
+                    RideRatingSheet(trip: trip)
+                        .environmentObject(session)
+                }
+            }
         }
         .padding(16)
         .background(.white)
@@ -2071,6 +2111,11 @@ private struct PassengerToolTrip: Identifiable {
     let seats: Int
     let priceSummary: String
     let sortDate: Date
+    let trip: PassengerTrip?
+
+    var canRate: Bool {
+        trip?.status == .completed
+    }
 
     static func trip(_ trip: PassengerTrip) -> PassengerToolTrip {
         PassengerToolTrip(
@@ -2082,7 +2127,8 @@ private struct PassengerToolTrip: Identifiable {
             detail: "\(trip.rideSnapshot.departureAt.date.profileDateLabel) with \(trip.rideSnapshot.driverDisplayName)",
             seats: trip.seats,
             priceSummary: CurrencySupport.format(cents: trip.rideSnapshot.pricePerSeatCents, regionCode: trip.rideSnapshot.from.state),
-            sortDate: trip.updatedAt.date
+            sortDate: trip.updatedAt.date,
+            trip: trip
         )
     }
 
@@ -2096,8 +2142,88 @@ private struct PassengerToolTrip: Identifiable {
             detail: request.status == .pending ? "Waiting for the driver to respond." : "Request \(request.status.profileDisplayTitle.lowercased()).",
             seats: request.seatsRequested,
             priceSummary: CurrencySupport.format(cents: request.pricePerSeatCents, countryCode: nil),
-            sortDate: request.updatedAt.date
+            sortDate: request.updatedAt.date,
+            trip: nil
         )
+    }
+}
+
+private struct RideRatingSheet: View {
+    @EnvironmentObject private var session: AppSession
+    @Environment(\.dismiss) private var dismiss
+    let trip: PassengerTrip
+    @State private var rating = 5
+    @State private var comment = ""
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Rate this trip")
+                            .font(.title3.bold())
+                            .foregroundStyle(Color.tmInk)
+                        Text("\(trip.rideSnapshot.from.displayName) → \(trip.rideSnapshot.to.displayName)")
+                            .font(.subheadline)
+                            .foregroundStyle(Color.tmSlate)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(16)
+                    .background(.white)
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+
+                    VStack(alignment: .leading, spacing: 14) {
+                        HStack(spacing: 10) {
+                            ForEach(1...5, id: \.self) { value in
+                                Button {
+                                    rating = value
+                                } label: {
+                                    Image(systemName: value <= rating ? "star.fill" : "star")
+                                        .font(.title2.weight(.semibold))
+                                        .foregroundStyle(Color.tmAmber)
+                                        .frame(width: 42, height: 42)
+                                        .background(Color.tmAmber.opacity(value <= rating ? 0.16 : 0.08))
+                                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+
+                        TextField("Add a short review", text: $comment, axis: .vertical)
+                            .lineLimit(3...6)
+                            .padding(12)
+                            .background(Color.tmMist)
+                            .clipShape(RoundedRectangle(cornerRadius: 8))
+
+                        ProfileToolSaveButton(
+                            title: "Submit rating",
+                            isWorking: session.isAccountToolsWorking
+                        ) {
+                            Task {
+                                if await session.submitRideReview(trip: trip, rating: rating, comment: comment) {
+                                    dismiss()
+                                }
+                            }
+                        }
+                    }
+                    .padding(16)
+                    .background(.white)
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+
+                    ProfileToolFeedback()
+                }
+                .padding(20)
+            }
+            .background(Color.tmMist.ignoresSafeArea())
+            .navigationTitle("Rating")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+            }
+            .tint(Color.tmGreen)
+        }
     }
 }
 

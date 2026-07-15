@@ -72,7 +72,13 @@ extension UserProfile {
         countryCode: String? = nil,
         role: AppRole? = nil,
         profilePhotoPath: String? = nil,
-        replacesProfilePhotoPath: Bool = false
+        replacesProfilePhotoPath: Bool = false,
+        ratingAverage: Double? = nil,
+        ratingCount: Int? = nil,
+        completedTripCount: Int? = nil,
+        totalSavingsCents: Int? = nil,
+        isIdentityVerified: Bool? = nil,
+        isDriverVerified: Bool? = nil
     ) -> UserProfile {
         UserProfile(
             uid: uid,
@@ -83,12 +89,12 @@ extension UserProfile {
             countryCode: countryCode ?? self.countryCode,
             role: role ?? self.role,
             profilePhotoPath: replacesProfilePhotoPath ? profilePhotoPath : self.profilePhotoPath,
-            ratingAverage: ratingAverage,
-            ratingCount: ratingCount,
-            completedTripCount: completedTripCount,
-            totalSavingsCents: totalSavingsCents,
-            isIdentityVerified: isIdentityVerified,
-            isDriverVerified: isDriverVerified
+            ratingAverage: ratingAverage ?? self.ratingAverage,
+            ratingCount: ratingCount ?? self.ratingCount,
+            completedTripCount: completedTripCount ?? self.completedTripCount,
+            totalSavingsCents: totalSavingsCents ?? self.totalSavingsCents,
+            isIdentityVerified: isIdentityVerified ?? self.isIdentityVerified,
+            isDriverVerified: isDriverVerified ?? self.isDriverVerified
         )
     }
 }

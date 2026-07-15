@@ -10,6 +10,12 @@ service cloud.firestore {
       return isSignedIn() && request.auth.uid == uid;
     }
 
+    function onlyRatingAggregateChanged() {
+      return isSignedIn()
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['ratingAverage', 'ratingCount', 'completedTripCount', 'updatedAt']);
+    }
+
     function ride(rideId) {
       return get(/databases/$(database)/documents/rides/$(rideId));
     }
@@ -73,7 +79,9 @@ service cloud.firestore {
     }
 
     match /users/{userId} {
-      allow read, create, update, delete: if isOwner(userId);
+      allow read: if isSignedIn();
+      allow create, delete: if isOwner(userId);
+      allow update: if isOwner(userId) || onlyRatingAggregateChanged();
 
       match /vehicles/{vehicleId} {
         allow read, create, update, delete: if isOwner(userId);
@@ -84,6 +92,10 @@ service cloud.firestore {
       }
 
       match /supportRequests/{supportRequestId} {
+        allow read, create, update, delete: if isOwner(userId);
+      }
+
+      match /verificationRequests/{verificationRequestId} {
         allow read, create, update, delete: if isOwner(userId);
       }
     }
@@ -138,6 +150,20 @@ service cloud.firestore {
           && request.resource.data.conversationId == conversationId;
         allow delete: if isParentConversationParticipant(conversationId);
       }
+    }
+
+    match /safetyReports/{reportId} {
+      allow read: if isSignedIn()
+        && (resource.data.reporterUid == request.auth.uid || resource.data.reportedUid == request.auth.uid);
+      allow create: if isSignedIn() && request.resource.data.reporterUid == request.auth.uid;
+      allow update, delete: if false;
+    }
+
+    match /rideReviews/{reviewId} {
+      allow read: if isSignedIn()
+        && (resource.data.reviewerUid == request.auth.uid || resource.data.revieweeUid == request.auth.uid);
+      allow create: if isSignedIn() && request.resource.data.reviewerUid == request.auth.uid;
+      allow update, delete: if false;
     }
 
     match /{document=**} {

@@ -281,6 +281,87 @@ struct LocalFirestoreAccountToolService {
     }
 }
 
+struct LocalFirestoreTrustSafetyService {
+    private let config: FirebaseBackendConfig
+
+    init(config: FirebaseBackendConfig = .current) {
+        self.config = config
+    }
+
+    private var documentsURL: URL {
+        config.firestoreDocumentsURL
+    }
+
+    func submitVerificationRequest(_ request: TrustVerificationRequest, idToken: String) async throws {
+        try config.validate()
+        let url = documentsURL
+            .appendingPathComponent("users")
+            .appendingPathComponent(request.userUid)
+            .appendingPathComponent("verificationRequests")
+            .appendingPathComponent(request.id)
+        var urlRequest = URLRequest(url: url)
+        urlRequest.httpMethod = "PATCH"
+        urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        urlRequest.setValue("Bearer \(idToken)", forHTTPHeaderField: "Authorization")
+        urlRequest.httpBody = try JSONEncoder().encode(FirestoreVerificationRequestDocument(request: request))
+
+        let (_, response) = try await URLSession.shared.data(for: urlRequest)
+        guard let httpResponse = response as? HTTPURLResponse,
+              (200..<300).contains(httpResponse.statusCode) else {
+            throw LocalAuthError.invalidResponse
+        }
+    }
+
+    func submitSafetyReport(_ report: RideSafetyReport, idToken: String) async throws {
+        try config.validate()
+        var request = URLRequest(url: documentsURL.appendingPathComponent("safetyReports").appendingPathComponent(report.id))
+        request.httpMethod = "PATCH"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("Bearer \(idToken)", forHTTPHeaderField: "Authorization")
+        request.httpBody = try JSONEncoder().encode(FirestoreSafetyReportDocument(report: report))
+
+        let (_, response) = try await URLSession.shared.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse,
+              (200..<300).contains(httpResponse.statusCode) else {
+            throw LocalAuthError.invalidResponse
+        }
+    }
+
+    func fetchReview(id: String, idToken: String) async throws -> RideReview? {
+        try config.validate()
+        var request = URLRequest(url: documentsURL.appendingPathComponent("rideReviews").appendingPathComponent(id))
+        request.setValue("Bearer \(idToken)", forHTTPHeaderField: "Authorization")
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw LocalAuthError.invalidResponse
+        }
+        if httpResponse.statusCode == 404 {
+            return nil
+        }
+        guard (200..<300).contains(httpResponse.statusCode) else {
+            throw LocalAuthError.invalidResponse
+        }
+
+        return try JSONDecoder().decode(FirestoreDecodedRideReviewDocument.self, from: data).rideReview
+    }
+
+    func saveReview(_ review: RideReview, idToken: String) async throws {
+        try config.validate()
+        var request = URLRequest(url: documentsURL.appendingPathComponent("rideReviews").appendingPathComponent(review.id))
+        request.httpMethod = "PATCH"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("Bearer \(idToken)", forHTTPHeaderField: "Authorization")
+        request.httpBody = try JSONEncoder().encode(FirestoreRideReviewDocument(review: review))
+
+        let (_, response) = try await URLSession.shared.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse,
+              (200..<300).contains(httpResponse.statusCode) else {
+            throw LocalAuthError.invalidResponse
+        }
+    }
+}
+
 struct LocalFirestoreRideService {
     private let config: FirebaseBackendConfig
 
@@ -720,6 +801,18 @@ private struct FirestoreRideDocument: Encodable {
             rideFields["driverProfilePhotoPath"] = .string(driverProfilePhotoPath)
         }
 
+        if let driverRatingAverage = ride.driverRatingAverage {
+            rideFields["driverRatingAverage"] = .double(driverRatingAverage)
+        }
+
+        if let driverRatingCount = ride.driverRatingCount {
+            rideFields["driverRatingCount"] = .integer(driverRatingCount)
+        }
+
+        if let driverIsVerified = ride.driverIsVerified {
+            rideFields["driverIsVerified"] = .boolean(driverIsVerified)
+        }
+
         if let expectedArrivalAt = ride.expectedArrivalAt {
             rideFields["expectedArrivalAt"] = .timestamp(expectedArrivalAt.date)
         }
@@ -856,9 +949,59 @@ private struct FirestoreSupportRequestDocument: Encodable {
     }
 }
 
+private struct FirestoreVerificationRequestDocument: Encodable {
+    let fields: [String: FirestoreRideValue]
+
+    init(request: TrustVerificationRequest) {
+        fields = [
+            "userUid": .string(request.userUid),
+            "role": .string(request.role.rawValue),
+            "documentType": .string(request.documentType),
+            "documentLastFour": .string(request.documentLastFour),
+            "issuingRegion": .string(request.issuingRegion),
+            "status": .string(request.status.rawValue),
+            "createdAt": .timestamp(request.createdAt.date),
+            "updatedAt": .timestamp(request.updatedAt.date)
+        ]
+    }
+}
+
+private struct FirestoreSafetyReportDocument: Encodable {
+    let fields: [String: FirestoreRideValue]
+
+    init(report: RideSafetyReport) {
+        fields = [
+            "rideId": .string(report.rideId),
+            "reporterUid": .string(report.reporterUid),
+            "reportedUid": .string(report.reportedUid),
+            "category": .string(report.category),
+            "details": .string(report.details),
+            "status": .string(report.status.rawValue),
+            "createdAt": .timestamp(report.createdAt.date)
+        ]
+    }
+}
+
+private struct FirestoreRideReviewDocument: Encodable {
+    let fields: [String: FirestoreRideValue]
+
+    init(review: RideReview) {
+        fields = [
+            "tripId": .string(review.tripId),
+            "rideId": .string(review.rideId),
+            "reviewerUid": .string(review.reviewerUid),
+            "revieweeUid": .string(review.revieweeUid),
+            "rating": .integer(review.rating),
+            "comment": .string(review.comment),
+            "createdAt": .timestamp(review.createdAt.date)
+        ]
+    }
+}
+
 private enum FirestoreRideValue: Encodable {
     case string(String)
     case integer(Int)
+    case double(Double)
     case boolean(Bool)
     case timestamp(Date)
     case map([String: FirestoreRideValue])
@@ -873,6 +1016,8 @@ private enum FirestoreRideValue: Encodable {
             try container.encode(value, forKey: .stringValue)
         case .integer(let value):
             try container.encode(String(value), forKey: .integerValue)
+        case .double(let value):
+            try container.encode(value, forKey: .doubleValue)
         case .boolean(let value):
             try container.encode(value, forKey: .booleanValue)
         case .timestamp(let date):
@@ -892,6 +1037,7 @@ private enum FirestoreRideValue: Encodable {
     private enum CodingKeys: String, CodingKey {
         case stringValue
         case integerValue
+        case doubleValue
         case booleanValue
         case timestampValue
         case mapValue
@@ -1119,6 +1265,9 @@ private struct FirestoreDecodedRideDocument: Decodable {
             vehicle: vehicle,
             status: status,
             notes: notes,
+            driverRatingAverage: fields["driverRatingAverage"]?.double,
+            driverRatingCount: fields["driverRatingCount"]?.intValue,
+            driverIsVerified: fields["driverIsVerified"]?.booleanValue,
             createdAt: createdAt,
             updatedAt: updatedAt
         )
@@ -1268,6 +1417,35 @@ private struct FirestoreDecodedMessageDocument: Decodable {
     }
 }
 
+private struct FirestoreDecodedRideReviewDocument: Decodable {
+    let name: String?
+    let fields: [String: FirestoreDecodedValue]
+
+    var rideReview: RideReview? {
+        let id = name?.split(separator: "/").last.map(String.init) ?? UUID().uuidString
+        guard let tripId = fields["tripId"]?.stringValue,
+              let rideId = fields["rideId"]?.stringValue,
+              let reviewerUid = fields["reviewerUid"]?.stringValue,
+              let revieweeUid = fields["revieweeUid"]?.stringValue,
+              let rating = fields["rating"]?.intValue,
+              let comment = fields["comment"]?.stringValue,
+              let createdAt = fields["createdAt"]?.timestamp else {
+            return nil
+        }
+
+        return RideReview(
+            id: id,
+            tripId: tripId,
+            rideId: rideId,
+            reviewerUid: reviewerUid,
+            revieweeUid: revieweeUid,
+            rating: rating,
+            comment: comment,
+            createdAt: createdAt
+        )
+    }
+}
+
 private struct FirestoreDecodedAccountToolSettingsDocument: Decodable {
     let name: String?
     let fields: [String: FirestoreDecodedValue]
@@ -1286,6 +1464,7 @@ private struct FirestoreDecodedAccountToolSettingsDocument: Decodable {
 private struct FirestoreDecodedValue: Decodable {
     let stringValue: String?
     let integerValue: String?
+    let doubleValue: Double?
     let booleanValue: Bool?
     let timestampValue: String?
     let mapValue: FirestoreDecodedMapValue?
@@ -1293,6 +1472,10 @@ private struct FirestoreDecodedValue: Decodable {
 
     var intValue: Int? {
         integerValue.flatMap(Int.init)
+    }
+
+    var double: Double? {
+        doubleValue ?? integerValue.flatMap(Double.init)
     }
 
     var stringArray: [String]? {
