@@ -16,6 +16,7 @@ final class AppSession: ObservableObject {
     @Published var driverRideRequests: [JoinRideRequest] = []
     @Published var conversations: [RideConversation] = []
     @Published var messagesByConversationId: [String: [RideMessage]] = [:]
+    @Published var accountToolSettings: AccountToolSettings = .empty
     @Published var authError: String?
     @Published var authNotice: String?
     @Published var isAuthWorking = false
@@ -35,6 +36,9 @@ final class AppSession: ObservableObject {
     @Published var isConversationsLoading = false
     @Published var isMessagesLoading = false
     @Published var isMessageSending = false
+    @Published var isAccountToolsLoading = false
+    @Published var isAccountToolsWorking = false
+    @Published var accountToolsNotice: String?
 
     private let authService = LocalFirebaseAuthService()
     private let sessionStore = AuthSessionStore()
@@ -45,6 +49,7 @@ final class AppSession: ObservableObject {
     private let rideRequestService = LocalFirestoreRideRequestService()
     private let passengerTripService = LocalFirestorePassengerTripService()
     private let messagingService = LocalFirestoreMessagingService()
+    private let accountToolService = LocalFirestoreAccountToolService()
 
     init() {
         Task { await restoreSession() }
@@ -112,10 +117,12 @@ final class AppSession: ObservableObject {
         driverRideRequests = []
         conversations = []
         messagesByConversationId = [:]
+        accountToolSettings = .empty
         isAuthenticated = false
         authError = nil
         authNotice = nil
         profileError = nil
+        accountToolsNotice = nil
     }
 
     func sendPasswordReset(email: String) async -> Bool {
@@ -799,6 +806,73 @@ final class AppSession: ObservableObject {
         }
     }
 
+    func loadAccountToolSettings() async {
+        guard let authUser else {
+            authError = "Please log in before loading account settings."
+            return
+        }
+
+        isAccountToolsLoading = true
+        authError = nil
+        defer { isAccountToolsLoading = false }
+
+        do {
+            accountToolSettings = try await accountToolService.fetchSettings(uid: authUser.uid, idToken: authUser.idToken)
+        } catch {
+            authError = error.localizedDescription
+        }
+    }
+
+    func saveIdentitySettings(_ identity: IdentityToolSettings) async -> Bool {
+        await saveAccountToolSettings(accountToolSettings.updated(identity: identity), notice: "Identity details saved.")
+    }
+
+    func savePaymentSettings(_ payment: PaymentToolSettings) async -> Bool {
+        await saveAccountToolSettings(accountToolSettings.updated(payment: payment), notice: "Payment preference saved.")
+    }
+
+    func saveTripAlertSettings(_ alerts: TripAlertSettings) async -> Bool {
+        await saveAccountToolSettings(accountToolSettings.updated(alerts: alerts), notice: "Trip alerts saved.")
+    }
+
+    func savePayoutSettings(_ payout: PayoutToolSettings) async -> Bool {
+        await saveAccountToolSettings(accountToolSettings.updated(payout: payout), notice: "Payout setup saved.")
+    }
+
+    func submitSupportRequest(topic: String, message: String) async -> Bool {
+        guard let authUser else {
+            authError = "Please log in before contacting support."
+            return false
+        }
+
+        let cleanMessage = message.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanMessage.isEmpty else {
+            authError = "Describe what happened before sending your request."
+            return false
+        }
+
+        isAccountToolsWorking = true
+        authError = nil
+        accountToolsNotice = nil
+        defer { isAccountToolsWorking = false }
+
+        do {
+            let ticket = SupportRequestTicket(
+                id: UUID().uuidString.lowercased(),
+                topic: topic,
+                message: cleanMessage,
+                status: "open",
+                createdAt: FirestoreTimestamp(date: Date())
+            )
+            try await accountToolService.submitSupportRequest(ticket, uid: authUser.uid, idToken: authUser.idToken)
+            accountToolsNotice = "Support request sent."
+            return true
+        } catch {
+            authError = error.localizedDescription
+            return false
+        }
+    }
+
     private func performAuth(_ action: () async throws -> (AuthUser, UserProfile)) async {
         isAuthWorking = true
         authError = nil
@@ -866,7 +940,30 @@ final class AppSession: ObservableObject {
         passengerTrips = (try? await passengerTripService.fetchPassengerTrips(uid: authUser.uid, idToken: authUser.idToken)) ?? []
         driverRideRequests = (try? await rideRequestService.fetchDriverRequests(rideIds: Set(driverRides.map(\.id)), idToken: authUser.idToken)) ?? []
         conversations = (try? await messagingService.fetchConversations(uid: authUser.uid, idToken: authUser.idToken)) ?? []
+        accountToolSettings = (try? await accountToolService.fetchSettings(uid: authUser.uid, idToken: authUser.idToken)) ?? .empty
         isAuthenticated = true
+    }
+
+    private func saveAccountToolSettings(_ settings: AccountToolSettings, notice: String) async -> Bool {
+        guard let authUser else {
+            authError = "Please log in before saving account settings."
+            return false
+        }
+
+        isAccountToolsWorking = true
+        authError = nil
+        accountToolsNotice = nil
+        defer { isAccountToolsWorking = false }
+
+        do {
+            try await accountToolService.saveSettings(settings, uid: authUser.uid, idToken: authUser.idToken)
+            accountToolSettings = settings
+            accountToolsNotice = notice
+            return true
+        } catch {
+            authError = error.localizedDescription
+            return false
+        }
     }
 
     private func replacePassengerRequest(_ request: JoinRideRequest) {

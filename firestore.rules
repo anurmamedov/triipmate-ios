@@ -78,6 +78,14 @@ service cloud.firestore {
       match /vehicles/{vehicleId} {
         allow read, create, update, delete: if isOwner(userId);
       }
+
+      match /accountTools/{settingsId} {
+        allow read, create, update, delete: if isOwner(userId);
+      }
+
+      match /supportRequests/{supportRequestId} {
+        allow read, create, update, delete: if isOwner(userId);
+      }
     }
 
     match /rides/{rideId} {

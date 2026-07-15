@@ -1091,9 +1091,9 @@ struct SettingsRow: View {
 
 private struct IdentityAndLicenseView: View {
     @EnvironmentObject private var session: AppSession
-    @AppStorage("identityDocumentType") private var documentType = "Driver license"
-    @AppStorage("identityDocumentNumber") private var documentNumber = ""
-    @AppStorage("identityLicenseState") private var licenseState = ""
+    @State private var documentType = IdentityToolSettings.empty.documentType
+    @State private var documentNumber = ""
+    @State private var licenseState = ""
 
     private var isDriver: Bool { session.activeRole == .driver }
     private var profile: UserProfile? { session.userProfile }
@@ -1131,13 +1131,27 @@ private struct IdentityAndLicenseView: View {
                     if isDriver {
                         ProfileToolTextField(title: "State or province", placeholder: "Ontario, CA, PA...", text: $licenseState)
                     }
+
+                    ProfileToolSaveButton(
+                        title: "Save identity details",
+                        isWorking: session.isAccountToolsWorking
+                    ) {
+                        let identity = IdentityToolSettings(
+                            documentType: documentType,
+                            documentLastFour: String(documentNumber.filter(\.isNumber).suffix(4)),
+                            issuingRegion: licenseState.trimmingCharacters(in: .whitespacesAndNewlines)
+                        )
+                        Task { await session.saveIdentitySettings(identity) }
+                    }
                 }
 
                 ProfileToolNotice(
                     icon: "lock.shield.fill",
-                    title: "Local verification only",
-                    detail: "These details are saved on this device for local testing. Production verification will need a secure KYC provider before real approvals."
+                    title: "Secure test storage",
+                    detail: "Only the document type, last four digits, and region are saved for local testing. Production verification will need a secure KYC provider before real approvals."
                 )
+
+                ProfileToolFeedback()
             }
             .padding(20)
         }
@@ -1145,6 +1159,13 @@ private struct IdentityAndLicenseView: View {
         .navigationTitle("Identity and license")
         .navigationBarTitleDisplayMode(.inline)
         .tint(Color.tmGreen)
+        .task {
+            await session.loadAccountToolSettings()
+            apply(settings: session.accountToolSettings.identity)
+        }
+        .onChange(of: session.accountToolSettings) { settings in
+            apply(settings: settings.identity)
+        }
     }
 
     private var travelerStatus: String {
@@ -1160,13 +1181,20 @@ private struct IdentityAndLicenseView: View {
         let name = "\(profile.firstName) \(profile.lastName)".trimmingCharacters(in: .whitespacesAndNewlines)
         return name.isEmpty ? profile.email : name
     }
+
+    private func apply(settings: IdentityToolSettings) {
+        documentType = settings.documentType
+        documentNumber = settings.documentLastFour
+        licenseState = settings.issuingRegion
+    }
 }
 
 private struct PaymentMethodsView: View {
-    @AppStorage("paymentCardNickname") private var cardNickname = ""
-    @AppStorage("paymentLastFour") private var lastFour = ""
-    @AppStorage("paymentAutoReceipts") private var autoReceipts = true
-    @AppStorage("paymentDefaultMethod") private var defaultMethod = "Card"
+    @EnvironmentObject private var session: AppSession
+    @State private var cardNickname = ""
+    @State private var lastFour = ""
+    @State private var autoReceipts = true
+    @State private var defaultMethod = PaymentToolSettings.empty.defaultMethod
 
     var body: some View {
         ScrollView {
@@ -1194,6 +1222,19 @@ private struct PaymentMethodsView: View {
                         }
                     Toggle("Email receipts automatically", isOn: $autoReceipts)
                         .tint(Color.tmGreen)
+
+                    ProfileToolSaveButton(
+                        title: "Save payment preference",
+                        isWorking: session.isAccountToolsWorking
+                    ) {
+                        let payment = PaymentToolSettings(
+                            defaultMethod: defaultMethod,
+                            cardNickname: cardNickname.trimmingCharacters(in: .whitespacesAndNewlines),
+                            cardLastFour: lastFour,
+                            emailReceipts: autoReceipts
+                        )
+                        Task { await session.savePaymentSettings(payment) }
+                    }
                 }
 
                 ProfileToolNotice(
@@ -1201,21 +1242,38 @@ private struct PaymentMethodsView: View {
                     title: "Payments are not live yet",
                     detail: "This prepares the app flow. Real card storage should use Stripe, Apple Pay, or another PCI-compliant payment provider."
                 )
+
+                ProfileToolFeedback()
             }
             .padding(20)
         }
         .background(Color.tmMist.ignoresSafeArea())
         .navigationTitle("Payment methods")
         .navigationBarTitleDisplayMode(.inline)
+        .task {
+            await session.loadAccountToolSettings()
+            apply(settings: session.accountToolSettings.payment)
+        }
+        .onChange(of: session.accountToolSettings) { settings in
+            apply(settings: settings.payment)
+        }
+    }
+
+    private func apply(settings: PaymentToolSettings) {
+        cardNickname = settings.cardNickname
+        lastFour = settings.cardLastFour
+        autoReceipts = settings.emailReceipts
+        defaultMethod = settings.defaultMethod
     }
 }
 
 private struct TripAlertsView: View {
-    @AppStorage("alertRideRequests") private var rideRequests = true
-    @AppStorage("alertDriverDecisions") private var driverDecisions = true
-    @AppStorage("alertMessages") private var messages = true
-    @AppStorage("alertDepartureReminder") private var departureReminder = true
-    @AppStorage("alertReminderMinutes") private var reminderMinutes = 60.0
+    @EnvironmentObject private var session: AppSession
+    @State private var rideRequests = true
+    @State private var driverDecisions = true
+    @State private var messages = true
+    @State private var departureReminder = true
+    @State private var reminderMinutes = 60.0
 
     var body: some View {
         ScrollView {
@@ -1245,28 +1303,60 @@ private struct TripAlertsView: View {
                                 .tint(Color.tmGreen)
                         }
                     }
+
+                    ProfileToolSaveButton(
+                        title: "Save alert preferences",
+                        isWorking: session.isAccountToolsWorking
+                    ) {
+                        let alerts = TripAlertSettings(
+                            passengerRequests: rideRequests,
+                            driverDecisions: driverDecisions,
+                            messages: messages,
+                            departureReminder: departureReminder,
+                            reminderMinutes: Int(reminderMinutes)
+                        )
+                        Task { await session.saveTripAlertSettings(alerts) }
+                    }
                 }
                 .tint(Color.tmGreen)
 
                 ProfileToolNotice(
                     icon: "iphone.gen3.radiowaves.left.and.right",
-                    title: "Local settings",
-                    detail: "These preferences are ready for the app. Push notifications will need APNs and Firebase Cloud Messaging later."
+                    title: "Saved to your account",
+                    detail: "These preferences now reload with your profile. Push notifications will need APNs and Firebase Cloud Messaging later."
                 )
+
+                ProfileToolFeedback()
             }
             .padding(20)
         }
         .background(Color.tmMist.ignoresSafeArea())
         .navigationTitle("Trip alerts")
         .navigationBarTitleDisplayMode(.inline)
+        .task {
+            await session.loadAccountToolSettings()
+            apply(settings: session.accountToolSettings.alerts)
+        }
+        .onChange(of: session.accountToolSettings) { settings in
+            apply(settings: settings.alerts)
+        }
     }
 
     private var enabledCount: Int {
         [rideRequests, driverDecisions, messages, departureReminder].filter { $0 }.count
     }
+
+    private func apply(settings: TripAlertSettings) {
+        rideRequests = settings.passengerRequests
+        driverDecisions = settings.driverDecisions
+        messages = settings.messages
+        departureReminder = settings.departureReminder
+        reminderMinutes = Double(settings.reminderMinutes)
+    }
 }
 
 private struct SupportCenterView: View {
+    @EnvironmentObject private var session: AppSession
     @State private var selectedTopic = "Ride issue"
     @State private var message = ""
     @State private var didSend = false
@@ -1304,20 +1394,36 @@ private struct SupportCenterView: View {
                         .clipShape(RoundedRectangle(cornerRadius: 8))
 
                     Button {
-                        didSend = true
-                        message = ""
+                        Task {
+                            let sent = await session.submitSupportRequest(topic: selectedTopic, message: message)
+                            if sent {
+                                didSend = true
+                                message = ""
+                            }
+                        }
                     } label: {
-                        Label("Send request", systemImage: "paperplane.fill")
-                            .font(.headline)
-                            .foregroundStyle(.white)
-                            .frame(maxWidth: .infinity)
-                            .frame(height: 50)
-                            .background(message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? Color.tmSlate.opacity(0.45) : Color.tmGreen)
-                            .clipShape(RoundedRectangle(cornerRadius: 8))
+                        if session.isAccountToolsWorking {
+                            ProgressView()
+                                .tint(.white)
+                                .frame(maxWidth: .infinity)
+                                .frame(height: 50)
+                                .background(Color.tmGreen)
+                                .clipShape(RoundedRectangle(cornerRadius: 8))
+                        } else {
+                            Label("Send request", systemImage: "paperplane.fill")
+                                .font(.headline)
+                                .foregroundStyle(.white)
+                                .frame(maxWidth: .infinity)
+                                .frame(height: 50)
+                                .background(message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? Color.tmSlate.opacity(0.45) : Color.tmGreen)
+                                .clipShape(RoundedRectangle(cornerRadius: 8))
+                        }
                     }
                     .buttonStyle(.plain)
-                    .disabled(message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    .disabled(message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || session.isAccountToolsWorking)
                 }
+
+                ProfileToolFeedback()
             }
             .padding(20)
         }
@@ -1386,11 +1492,12 @@ private struct DriverPassengerRequestsToolView: View {
 }
 
 private struct PayoutSetupView: View {
-    @AppStorage("payoutAccountName") private var accountName = ""
-    @AppStorage("payoutInstitution") private var institution = ""
-    @AppStorage("payoutLastFour") private var lastFour = ""
-    @AppStorage("payoutFrequency") private var frequency = "Weekly"
-    @AppStorage("payoutTaxReady") private var taxReady = false
+    @EnvironmentObject private var session: AppSession
+    @State private var accountName = ""
+    @State private var institution = ""
+    @State private var lastFour = ""
+    @State private var frequency = PayoutToolSettings.empty.frequency
+    @State private var taxReady = false
 
     var body: some View {
         ScrollView {
@@ -1418,6 +1525,20 @@ private struct PayoutSetupView: View {
                     .pickerStyle(.menu)
                     Toggle("Tax information ready", isOn: $taxReady)
                         .tint(Color.tmGreen)
+
+                    ProfileToolSaveButton(
+                        title: "Save payout setup",
+                        isWorking: session.isAccountToolsWorking
+                    ) {
+                        let payout = PayoutToolSettings(
+                            accountName: accountName.trimmingCharacters(in: .whitespacesAndNewlines),
+                            institution: institution.trimmingCharacters(in: .whitespacesAndNewlines),
+                            accountLastFour: lastFour,
+                            frequency: frequency,
+                            taxReady: taxReady
+                        )
+                        Task { await session.savePayoutSettings(payout) }
+                    }
                 }
 
                 ProfileToolNotice(
@@ -1425,12 +1546,29 @@ private struct PayoutSetupView: View {
                     title: "Payouts are not live yet",
                     detail: "Production payouts should use a provider such as Stripe Connect before real driver earnings are processed."
                 )
+
+                ProfileToolFeedback()
             }
             .padding(20)
         }
         .background(Color.tmMist.ignoresSafeArea())
         .navigationTitle("Payout setup")
         .navigationBarTitleDisplayMode(.inline)
+        .task {
+            await session.loadAccountToolSettings()
+            apply(settings: session.accountToolSettings.payout)
+        }
+        .onChange(of: session.accountToolSettings) { settings in
+            apply(settings: settings.payout)
+        }
+    }
+
+    private func apply(settings: PayoutToolSettings) {
+        accountName = settings.accountName
+        institution = settings.institution
+        lastFour = settings.accountLastFour
+        frequency = settings.frequency
+        taxReady = settings.taxReady
     }
 }
 
@@ -1688,6 +1826,68 @@ private struct ProfileToolNotice: View {
         }
         .padding(14)
         .background(Color.tmAmber.opacity(0.1))
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+}
+
+private struct ProfileToolSaveButton: View {
+    let title: String
+    let isWorking: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            if isWorking {
+                ProgressView()
+                    .tint(.white)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 50)
+                    .background(Color.tmGreen)
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+            } else {
+                Label(title, systemImage: "checkmark.circle.fill")
+                    .font(.headline)
+                    .foregroundStyle(.white)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 50)
+                    .background(Color.tmGreen)
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+            }
+        }
+        .buttonStyle(.plain)
+        .disabled(isWorking)
+    }
+}
+
+private struct ProfileToolFeedback: View {
+    @EnvironmentObject private var session: AppSession
+
+    var body: some View {
+        if let notice = session.accountToolsNotice {
+            ProfileToolStatusRow(icon: "checkmark.circle.fill", message: notice, color: .tmGreen)
+        } else if let error = session.authError {
+            ProfileToolStatusRow(icon: "exclamationmark.triangle.fill", message: error, color: .tmAmber)
+        }
+    }
+}
+
+private struct ProfileToolStatusRow: View {
+    let icon: String
+    let message: String
+    let color: Color
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: icon)
+                .foregroundStyle(color)
+            Text(message)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(Color.tmInk)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(12)
+        .background(color.opacity(0.12))
         .clipShape(RoundedRectangle(cornerRadius: 8))
     }
 }

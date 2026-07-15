@@ -3,6 +3,8 @@ import Foundation
 enum FirestoreCollection {
     static let users = "users"
     static let vehicles = "vehicles"
+    static let accountTools = "accountTools"
+    static let supportRequests = "supportRequests"
     static let rides = "rides"
     static let rideRequests = "rideRequests"
     static let trips = "trips"
@@ -15,6 +17,14 @@ enum FirestoreCollection {
 
     static func userVehiclesPath(uid: String) -> String {
         "\(userPath(uid: uid))/\(vehicles)"
+    }
+
+    static func userAccountToolsPath(uid: String) -> String {
+        "\(userPath(uid: uid))/\(accountTools)"
+    }
+
+    static func userSupportRequestsPath(uid: String) -> String {
+        "\(userPath(uid: uid))/\(supportRequests)"
     }
 
     static func ridePath(id: String) -> String {
@@ -204,6 +214,90 @@ struct RideMessage: Identifiable, Codable, Hashable {
     let body: String
     let status: MessageStatus
     let readByUids: [String]
+    let createdAt: FirestoreTimestamp
+}
+
+struct AccountToolSettings: Codable, Hashable {
+    let identity: IdentityToolSettings
+    let payment: PaymentToolSettings
+    let alerts: TripAlertSettings
+    let payout: PayoutToolSettings
+    let updatedAt: FirestoreTimestamp
+
+    static var empty: AccountToolSettings {
+        AccountToolSettings(
+            identity: .empty,
+            payment: .empty,
+            alerts: .default,
+            payout: .empty,
+            updatedAt: FirestoreTimestamp(date: Date())
+        )
+    }
+
+    func updated(
+        identity: IdentityToolSettings? = nil,
+        payment: PaymentToolSettings? = nil,
+        alerts: TripAlertSettings? = nil,
+        payout: PayoutToolSettings? = nil
+    ) -> AccountToolSettings {
+        AccountToolSettings(
+            identity: identity ?? self.identity,
+            payment: payment ?? self.payment,
+            alerts: alerts ?? self.alerts,
+            payout: payout ?? self.payout,
+            updatedAt: FirestoreTimestamp(date: Date())
+        )
+    }
+}
+
+struct IdentityToolSettings: Codable, Hashable {
+    let documentType: String
+    let documentLastFour: String
+    let issuingRegion: String
+
+    static let empty = IdentityToolSettings(documentType: "Driver license", documentLastFour: "", issuingRegion: "")
+}
+
+struct PaymentToolSettings: Codable, Hashable {
+    let defaultMethod: String
+    let cardNickname: String
+    let cardLastFour: String
+    let emailReceipts: Bool
+
+    static let empty = PaymentToolSettings(defaultMethod: "Card", cardNickname: "", cardLastFour: "", emailReceipts: true)
+}
+
+struct TripAlertSettings: Codable, Hashable {
+    let passengerRequests: Bool
+    let driverDecisions: Bool
+    let messages: Bool
+    let departureReminder: Bool
+    let reminderMinutes: Int
+
+    static let `default` = TripAlertSettings(
+        passengerRequests: true,
+        driverDecisions: true,
+        messages: true,
+        departureReminder: true,
+        reminderMinutes: 60
+    )
+}
+
+struct PayoutToolSettings: Codable, Hashable {
+    let accountName: String
+    let institution: String
+    let accountLastFour: String
+    let frequency: String
+    let taxReady: Bool
+
+    static let empty = PayoutToolSettings(accountName: "", institution: "", accountLastFour: "", frequency: "Weekly", taxReady: false)
+}
+
+struct SupportRequestTicket: Identifiable, Codable, Hashable {
+    let id: String
+    let topic: String
+    let message: String
+    let status: String
     let createdAt: FirestoreTimestamp
 }
 

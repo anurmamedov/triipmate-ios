@@ -8,6 +8,8 @@ This document defines the local Firestore schema for the marketplace features. T
 |---|---|
 | `users/{uid}` | One profile document for each Firebase Auth user. |
 | `users/{uid}/vehicles/{vehicleId}` | Vehicles owned by one driver. |
+| `users/{uid}/accountTools/settings` | Account tool preferences for Profile settings. |
+| `users/{uid}/supportRequests/{supportRequestId}` | Support requests created by the user. |
 | `rides/{rideId}` | Published or draft rides created by drivers. |
 | `rideRequests/{requestId}` | Passenger requests to join a ride. |
 | `trips/{tripId}` | Passenger trip records created from accepted requests. |
@@ -59,6 +61,51 @@ Required fields:
 Document ID:
 
 - Stable app-generated `vehicleId`
+
+## Account Tools
+
+Swift model:
+
+- `AccountToolSettings`
+
+Path:
+
+- `users/{uid}/accountTools/settings`
+
+Required maps:
+
+- `identity`
+- `payment`
+- `alerts`
+- `payout`
+- `updatedAt`
+
+Rules:
+
+- Only the owner can read or update account tool settings.
+- Sensitive production payment, bank, and identity data must not be stored directly. The current local model stores safe test summaries such as document last four digits, card last four digits, preferences, and setup status fields.
+
+## Support Requests
+
+Swift model:
+
+- `SupportRequestTicket`
+
+Path:
+
+- `users/{uid}/supportRequests/{supportRequestId}`
+
+Required fields:
+
+- `topic`
+- `message`
+- `status`
+- `createdAt`
+
+Rules:
+
+- Only the owner can create and read local support requests.
+- Production support should later add admin/provider review workflows before support tickets are useful outside local testing.
 
 ## Rides
 

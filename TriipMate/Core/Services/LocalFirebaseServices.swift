@@ -205,6 +205,82 @@ struct LocalFirestoreVehicleService {
     }
 }
 
+struct LocalFirestoreAccountToolService {
+    private let config: FirebaseBackendConfig
+
+    init(config: FirebaseBackendConfig = .current) {
+        self.config = config
+    }
+
+    private var usersURL: URL {
+        config.firestoreDocumentsURL.appendingPathComponent("users")
+    }
+
+    func fetchSettings(uid: String, idToken: String) async throws -> AccountToolSettings {
+        try config.validate()
+        let url = usersURL
+            .appendingPathComponent(uid)
+            .appendingPathComponent("accountTools")
+            .appendingPathComponent("settings")
+        var request = URLRequest(url: url)
+        request.setValue("Bearer \(idToken)", forHTTPHeaderField: "Authorization")
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw LocalAuthError.invalidResponse
+        }
+
+        if httpResponse.statusCode == 404 {
+            return .empty
+        }
+
+        guard (200..<300).contains(httpResponse.statusCode) else {
+            throw LocalAuthError.invalidResponse
+        }
+
+        let document = try JSONDecoder().decode(FirestoreDecodedAccountToolSettingsDocument.self, from: data)
+        return document.settings ?? .empty
+    }
+
+    func saveSettings(_ settings: AccountToolSettings, uid: String, idToken: String) async throws {
+        try config.validate()
+        let url = usersURL
+            .appendingPathComponent(uid)
+            .appendingPathComponent("accountTools")
+            .appendingPathComponent("settings")
+        var request = URLRequest(url: url)
+        request.httpMethod = "PATCH"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("Bearer \(idToken)", forHTTPHeaderField: "Authorization")
+        request.httpBody = try JSONEncoder().encode(FirestoreAccountToolSettingsDocument(settings: settings))
+
+        let (_, response) = try await URLSession.shared.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse,
+              (200..<300).contains(httpResponse.statusCode) else {
+            throw LocalAuthError.invalidResponse
+        }
+    }
+
+    func submitSupportRequest(_ ticket: SupportRequestTicket, uid: String, idToken: String) async throws {
+        try config.validate()
+        let url = usersURL
+            .appendingPathComponent(uid)
+            .appendingPathComponent("supportRequests")
+            .appendingPathComponent(ticket.id)
+        var request = URLRequest(url: url)
+        request.httpMethod = "PATCH"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("Bearer \(idToken)", forHTTPHeaderField: "Authorization")
+        request.httpBody = try JSONEncoder().encode(FirestoreSupportRequestDocument(ticket: ticket))
+
+        let (_, response) = try await URLSession.shared.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse,
+              (200..<300).contains(httpResponse.statusCode) else {
+            throw LocalAuthError.invalidResponse
+        }
+    }
+}
+
 struct LocalFirestoreRideService {
     private let config: FirebaseBackendConfig
 
@@ -753,9 +829,37 @@ private struct FirestoreMessageDocument: Encodable {
     }
 }
 
+private struct FirestoreAccountToolSettingsDocument: Encodable {
+    let fields: [String: FirestoreRideValue]
+
+    init(settings: AccountToolSettings) {
+        fields = [
+            "identity": .map(settings.identity.firestoreFields),
+            "payment": .map(settings.payment.firestoreFields),
+            "alerts": .map(settings.alerts.firestoreFields),
+            "payout": .map(settings.payout.firestoreFields),
+            "updatedAt": .timestamp(settings.updatedAt.date)
+        ]
+    }
+}
+
+private struct FirestoreSupportRequestDocument: Encodable {
+    let fields: [String: FirestoreRideValue]
+
+    init(ticket: SupportRequestTicket) {
+        fields = [
+            "topic": .string(ticket.topic),
+            "message": .string(ticket.message),
+            "status": .string(ticket.status),
+            "createdAt": .timestamp(ticket.createdAt.date)
+        ]
+    }
+}
+
 private enum FirestoreRideValue: Encodable {
     case string(String)
     case integer(Int)
+    case boolean(Bool)
     case timestamp(Date)
     case map([String: FirestoreRideValue])
     case array([FirestoreRideValue])
@@ -769,6 +873,8 @@ private enum FirestoreRideValue: Encodable {
             try container.encode(value, forKey: .stringValue)
         case .integer(let value):
             try container.encode(String(value), forKey: .integerValue)
+        case .boolean(let value):
+            try container.encode(value, forKey: .booleanValue)
         case .timestamp(let date):
             try container.encode(Self.timestampFormatter.string(from: date), forKey: .timestampValue)
         case .map(let fields):
@@ -786,6 +892,7 @@ private enum FirestoreRideValue: Encodable {
     private enum CodingKeys: String, CodingKey {
         case stringValue
         case integerValue
+        case booleanValue
         case timestampValue
         case mapValue
         case arrayValue
@@ -1161,9 +1268,25 @@ private struct FirestoreDecodedMessageDocument: Decodable {
     }
 }
 
+private struct FirestoreDecodedAccountToolSettingsDocument: Decodable {
+    let name: String?
+    let fields: [String: FirestoreDecodedValue]
+
+    var settings: AccountToolSettings? {
+        AccountToolSettings(
+            identity: fields["identity"]?.identityToolSettings ?? .empty,
+            payment: fields["payment"]?.paymentToolSettings ?? .empty,
+            alerts: fields["alerts"]?.tripAlertSettings ?? .default,
+            payout: fields["payout"]?.payoutToolSettings ?? .empty,
+            updatedAt: fields["updatedAt"]?.timestamp ?? FirestoreTimestamp(date: Date())
+        )
+    }
+}
+
 private struct FirestoreDecodedValue: Decodable {
     let stringValue: String?
     let integerValue: String?
+    let booleanValue: Bool?
     let timestampValue: String?
     let mapValue: FirestoreDecodedMapValue?
     let arrayValue: FirestoreDecodedArrayValue?
@@ -1252,6 +1375,47 @@ private struct FirestoreDecodedValue: Decodable {
         )
     }
 
+    var identityToolSettings: IdentityToolSettings? {
+        guard let fields = mapValue?.fields else { return nil }
+        return IdentityToolSettings(
+            documentType: fields["documentType"]?.stringValue ?? IdentityToolSettings.empty.documentType,
+            documentLastFour: fields["documentLastFour"]?.stringValue ?? "",
+            issuingRegion: fields["issuingRegion"]?.stringValue ?? ""
+        )
+    }
+
+    var paymentToolSettings: PaymentToolSettings? {
+        guard let fields = mapValue?.fields else { return nil }
+        return PaymentToolSettings(
+            defaultMethod: fields["defaultMethod"]?.stringValue ?? PaymentToolSettings.empty.defaultMethod,
+            cardNickname: fields["cardNickname"]?.stringValue ?? "",
+            cardLastFour: fields["cardLastFour"]?.stringValue ?? "",
+            emailReceipts: fields["emailReceipts"]?.booleanValue ?? true
+        )
+    }
+
+    var tripAlertSettings: TripAlertSettings? {
+        guard let fields = mapValue?.fields else { return nil }
+        return TripAlertSettings(
+            passengerRequests: fields["passengerRequests"]?.booleanValue ?? true,
+            driverDecisions: fields["driverDecisions"]?.booleanValue ?? true,
+            messages: fields["messages"]?.booleanValue ?? true,
+            departureReminder: fields["departureReminder"]?.booleanValue ?? true,
+            reminderMinutes: fields["reminderMinutes"]?.intValue ?? 60
+        )
+    }
+
+    var payoutToolSettings: PayoutToolSettings? {
+        guard let fields = mapValue?.fields else { return nil }
+        return PayoutToolSettings(
+            accountName: fields["accountName"]?.stringValue ?? "",
+            institution: fields["institution"]?.stringValue ?? "",
+            accountLastFour: fields["accountLastFour"]?.stringValue ?? "",
+            frequency: fields["frequency"]?.stringValue ?? PayoutToolSettings.empty.frequency,
+            taxReady: fields["taxReady"]?.booleanValue ?? false
+        )
+    }
+
     private static func date(from timestamp: String) -> Date? {
         fractionalTimestampFormatter.date(from: timestamp) ?? wholeSecondTimestampFormatter.date(from: timestamp)
     }
@@ -1324,6 +1488,51 @@ private extension RideSnapshot {
         }
 
         return fields
+    }
+}
+
+private extension IdentityToolSettings {
+    var firestoreFields: [String: FirestoreRideValue] {
+        [
+            "documentType": .string(documentType),
+            "documentLastFour": .string(documentLastFour),
+            "issuingRegion": .string(issuingRegion)
+        ]
+    }
+}
+
+private extension PaymentToolSettings {
+    var firestoreFields: [String: FirestoreRideValue] {
+        [
+            "defaultMethod": .string(defaultMethod),
+            "cardNickname": .string(cardNickname),
+            "cardLastFour": .string(cardLastFour),
+            "emailReceipts": .boolean(emailReceipts)
+        ]
+    }
+}
+
+private extension TripAlertSettings {
+    var firestoreFields: [String: FirestoreRideValue] {
+        [
+            "passengerRequests": .boolean(passengerRequests),
+            "driverDecisions": .boolean(driverDecisions),
+            "messages": .boolean(messages),
+            "departureReminder": .boolean(departureReminder),
+            "reminderMinutes": .integer(reminderMinutes)
+        ]
+    }
+}
+
+private extension PayoutToolSettings {
+    var firestoreFields: [String: FirestoreRideValue] {
+        [
+            "accountName": .string(accountName),
+            "institution": .string(institution),
+            "accountLastFour": .string(accountLastFour),
+            "frequency": .string(frequency),
+            "taxReady": .boolean(taxReady)
+        ]
     }
 }
 

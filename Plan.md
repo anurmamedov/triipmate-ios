@@ -156,15 +156,15 @@ This plan reflects the active Xcode target as of July 2026. The project now uses
 
 **Done when:** unauthorized operations fail and core local workflows pass automatically.
 
-## 15. Complete Account Tools and Settings `[~]`
+## 15. Complete Account Tools and Settings `[x]`
 
 - Identity and license, payment methods, trip alerts, support, passenger requests, and payout setup now open from Profile with usable local UI.
 - Passenger requests are connected to Firestore-backed driver request decisions.
-- Identity/license, payment methods, trip alerts, support forms, and payout setup are still stored locally or shown as prototype flows.
-- Add Firestore schemas for account settings, notification preferences, support tickets, payout setup status, and verification status.
-- Persist account-tool changes per authenticated user instead of using device-only `AppStorage`.
-- Add loading, validation, save, error, and success states for each tool page.
-- Decide which fields are local-only, which are user-editable, and which must be controlled by an admin/provider.
+- Added Firestore schemas for account settings and support tickets.
+- Persisted identity/license summaries, payment preferences, trip alert preferences, payout setup, and support requests per authenticated user instead of device-only `AppStorage`.
+- Added loading, save, error, and success states for each account tool page.
+- Kept payment, bank, and identity data as safe local summaries only, with production provider work deferred to later trust/payment stages.
+- Updated Firestore rules so only the owner can access account tool settings and support requests.
 
 **Done when:** every Profile tool opens, saves the correct data for the logged-in user, reloads after logout/login, and clearly avoids fake production payment or verification promises.
 
@@ -256,4 +256,4 @@ This plan reflects the active Xcode target as of July 2026. The project now uses
 
 ## Recommended Next Work
 
-Continue stage **15** next so Profile tools persist to Firestore instead of device-only local storage. After that, stage **18** should add real-time updates and badges, and stage **19** should move seat booking and driver decisions into a transactional backend/API path.
+Continue stage **16** next so verification, trust, safety, ratings, reports, and cancellation policies become real workflows. After that, stage **18** should add real-time updates and badges, and stage **19** should move seat booking and driver decisions into a transactional backend/API path.
